@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Private credentials and local certificates
+*.pem
+*.key
+serviceAccount*.json
+firebase-adminsdk*.json
