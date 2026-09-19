@@ -1,13 +1,12 @@
 import * as XLSX from 'xlsx'
 
 export const CALENDAR_SHEET_NAME = 'LỊCH'
-export const REQUIRED_HEADERS = ['Dương lịch', 'Lịch âm', 'Giờ TT']
+export const REQUIRED_HEADERS = []
 
-const normalizeHeader = (value) => String(value ?? '').trim()
+const normalizeHeader = (value) => String(value ?? '')
 
 function normalizeCell(value) {
   if (value instanceof Date) return value.toISOString()
-  if (typeof value === 'string') return value.trim()
   return value ?? ''
 }
 
@@ -34,17 +33,18 @@ export async function parseCalendarWorkbook(file) {
   const sheet = workbook.Sheets[CALENDAR_SHEET_NAME]
   const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false })
   const headerRow = (matrix[0] || []).map(normalizeHeader)
-  const duplicateHeaders = headerRow.filter((header, index) => header && headerRow.indexOf(header) !== index)
-  const missingHeaders = REQUIRED_HEADERS.filter((header) => !headerRow.includes(header))
+  const hasHeader = headerRow.some((header) => header.trim() !== '')
 
-  if (!headerRow.length || missingHeaders.length) {
-    throw new Error(`Cấu trúc sheet không phù hợp. Thiếu cột bắt buộc: ${missingHeaders.join(', ') || 'dòng header'}.`)
+  if (!hasHeader) {
+    throw new Error(`Sheet “${CALENDAR_SHEET_NAME}” không có hàng header hợp lệ.`)
   }
+
+  const duplicateHeaders = headerRow.filter((header, index) => header && headerRow.indexOf(header) !== index)
   if (duplicateHeaders.length) {
     throw new Error(`Header bị trùng: ${[...new Set(duplicateHeaders)].join(', ')}.`)
   }
 
-  const columns = headerRow.map((label, index) => ({ label: label || `Cột ${index + 1}`, index, key: getHeaderKey(index) }))
+  const columns = headerRow.map((label, index) => ({ label, index, key: getHeaderKey(index) }))
   const rows = matrix.slice(1).map((row, rowIndex) => {
     const values = columns.map(({ index }) => normalizeCell(row[index]))
     const sourceFields = Object.fromEntries(columns.map((column, index) => [column.label, values[index]]))
@@ -55,12 +55,11 @@ export async function parseCalendarWorkbook(file) {
       range: Object.fromEntries(values.map((value, index) => [getHeaderKey(index), comparableValue(value)])),
       values,
     }
-  }).filter((row) => row.values.some((value) => value !== ''))
+  }).filter((row) => row.values.some((value) => String(value).trim() !== ''))
 
-  const warnings = []
-  const requiredIndexes = REQUIRED_HEADERS.map((header) => headerRow.indexOf(header))
-  const blankRequiredRows = rows.filter((row) => requiredIndexes.some((index) => row.values[index] === '')).length
-  if (blankRequiredRows) warnings.push(`${blankRequiredRows} dòng thiếu ít nhất một cột bắt buộc.`)
+  if (!rows.length) {
+    throw new Error(`Sheet “${CALENDAR_SHEET_NAME}” có header nhưng không có dữ liệu bên dưới header.`)
+  }
 
   const uniqueCounts = columns.map((column) => new Set(rows.map((row) => String(row.values[column.index] ?? '')).filter(Boolean)).size)
   const filterOptions = columns.reduce((result, column) => {
@@ -69,20 +68,14 @@ export async function parseCalendarWorkbook(file) {
     return result
   }, {})
 
-  const validRows = rows.filter((row) => requiredIndexes.every((index) => row.values[index] !== ''))
-  const skippedRows = rows.length - validRows.length
-  if (!validRows.length) warnings.push('Không có bản ghi hợp lệ sau khi kiểm tra các cột bắt buộc.')
-  if (skippedRows) warnings.push(`${skippedRows} dòng sẽ được bỏ qua khi import.`)
-  if (duplicateHeaders.length) warnings.push('Header có giá trị trùng.')
-
   return {
     fileName: file.name,
     sheetName: CALENDAR_SHEET_NAME,
     columns,
     rows,
-    validRows,
-    skippedRows,
-    warnings,
+    validRows: rows,
+    skippedRows: 0,
+    warnings: [],
     filterOptions,
     columnStats: columns.map((column) => ({ ...column, uniqueCount: uniqueCounts[column.index] })),
     previewRows: rows.slice(0, 8),
