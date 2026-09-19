@@ -6,7 +6,6 @@ export const REQUIRED_HEADERS = []
 const normalizeHeader = (value) => String(value ?? '')
 
 function normalizeCell(value) {
-  if (value instanceof Date) return value.toISOString()
   return value ?? ''
 }
 
@@ -22,9 +21,30 @@ function getHeaderKey(index) {
   return `f${index}`
 }
 
+function hasValue(value) {
+  return value !== '' && value !== null && value !== undefined
+}
+
+function findSparseRowThreshold(rows) {
+  const counts = [...new Set(rows.map((row) => row.values.filter(hasValue).length))].sort((a, b) => a - b)
+  if (counts.length < 2) return 0
+
+  let bestGap = null
+  for (let index = 1; index < counts.length; index += 1) {
+    const lower = counts[index - 1]
+    const upper = counts[index]
+    const relativeGap = (upper - lower) / Math.max(lower, 1)
+    if (!bestGap || relativeGap > bestGap.relativeGap) bestGap = { lower, upper, relativeGap }
+  }
+
+  // Only split clearly different row shapes. Similar densities may be legitimate optional fields.
+  if (!bestGap || bestGap.relativeGap <= 1) return 0
+  return Math.floor((bestGap.lower + bestGap.upper) / 2)
+}
+
 export async function parseCalendarWorkbook(file) {
   const buffer = await file.arrayBuffer()
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, raw: true })
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true })
 
   if (!workbook.SheetNames.includes(CALENDAR_SHEET_NAME)) {
     throw new Error(`Không tìm thấy sheet bắt buộc “${CALENDAR_SHEET_NAME}”. Các sheet hiện có: ${workbook.SheetNames.join(', ') || 'không có'}.`)
@@ -55,15 +75,27 @@ export async function parseCalendarWorkbook(file) {
       range: Object.fromEntries(values.map((value, index) => [getHeaderKey(index), comparableValue(value)])),
       values,
     }
-  }).filter((row) => row.values.some((value) => String(value).trim() !== ''))
+  }).filter((row) => row.values.some(hasValue))
 
   if (!rows.length) {
     throw new Error(`Sheet “${CALENDAR_SHEET_NAME}” có header nhưng không có dữ liệu bên dưới header.`)
   }
 
-  const uniqueCounts = columns.map((column) => new Set(rows.map((row) => String(row.values[column.index] ?? '')).filter(Boolean)).size)
+  const sparseRowThreshold = findSparseRowThreshold(rows)
+  const validRows = sparseRowThreshold > 0
+    ? rows.filter((row) => row.values.filter(hasValue).length > sparseRowThreshold)
+    : rows
+  const excludedRows = sparseRowThreshold > 0
+    ? rows.filter((row) => row.values.filter(hasValue).length <= sparseRowThreshold)
+    : []
+  const skippedRows = excludedRows.length
+  const warnings = skippedRows
+    ? [`${skippedRows} dòng có cấu trúc thưa bất thường và được giữ riêng trong validation report, không đưa vào import.`]
+    : []
+
+  const uniqueCounts = columns.map((column) => new Set(validRows.map((row) => String(row.values[column.index] ?? '')).filter(Boolean)).size)
   const filterOptions = columns.reduce((result, column) => {
-    const values = [...new Set(rows.map((row) => row.values[column.index]).filter((value) => value !== ''))]
+    const values = [...new Set(validRows.map((row) => row.values[column.index]).filter(hasValue))]
     if (values.length && values.length <= 200) result[column.key] = values
     return result
   }, {})
@@ -72,12 +104,19 @@ export async function parseCalendarWorkbook(file) {
     fileName: file.name,
     sheetName: CALENDAR_SHEET_NAME,
     columns,
-    rows,
-    validRows: rows,
-    skippedRows: 0,
-    warnings: [],
+    rows: validRows,
+    validRows,
+    skippedRows,
+    warnings,
+    excludedRows,
+    validationReport: {
+      sourceRowCount: rows.length,
+      importedRowCount: validRows.length,
+      sparseRowThreshold,
+      skippedRowNumbers: excludedRows.map((row) => row.sourceRowNumber),
+    },
     filterOptions,
     columnStats: columns.map((column) => ({ ...column, uniqueCount: uniqueCounts[column.index] })),
-    previewRows: rows.slice(0, 8),
+    previewRows: validRows.slice(0, 8),
   }
 }
