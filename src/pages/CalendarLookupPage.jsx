@@ -52,7 +52,12 @@ export default function CalendarLookupPage() {
 
   function exportResults() {
     if (!selectedImport || !rows.length) return
-    const sheet = XLSX.utils.json_to_sheet(rows.map((row) => row.sourceFields))
+    const columns = selectedImport.columns || []
+    const worksheetRows = [
+      columns.map((column) => column.label),
+      ...rows.map((row) => columns.map((column) => row.sourceFields?.[column.label] ?? '')),
+    ]
+    const sheet = XLSX.utils.aoa_to_sheet(worksheetRows)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'Ket qua tra cuu')
     XLSX.writeFile(workbook, `ket-qua-tra-cuu-${selectedImport.importId}.xlsx`)
