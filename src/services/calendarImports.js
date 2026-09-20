@@ -43,6 +43,7 @@ export async function importCalendarRows(parsed, onProgress) {
     columns: parsed.columns.map(({ label, key }) => ({ label, key })),
     filterOptions: parsed.filterOptions,
     warnings: parsed.warnings,
+    validationReport: parsed.validationReport,
   }
   await setDoc(importRef, metadata)
 

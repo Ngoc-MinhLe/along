@@ -42,6 +42,21 @@ function findSparseRowThreshold(rows) {
   return Math.floor((bestGap.lower + bestGap.upper) / 2)
 }
 
+function compressRowRanges(rows) {
+  const rowNumbers = rows.map((row) => row.sourceRowNumber).sort((a, b) => a - b)
+  const ranges = []
+  rowNumbers.forEach((rowNumber) => {
+    const current = ranges[ranges.length - 1]
+    if (!current || rowNumber !== current.to + 1) {
+      ranges.push({ from: rowNumber, to: rowNumber, count: 1 })
+    } else {
+      current.to = rowNumber
+      current.count += 1
+    }
+  })
+  return ranges
+}
+
 export async function parseCalendarWorkbook(file) {
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: false, raw: true })
@@ -108,12 +123,12 @@ export async function parseCalendarWorkbook(file) {
     validRows,
     skippedRows,
     warnings,
-    excludedRows,
     validationReport: {
       sourceRowCount: rows.length,
       importedRowCount: validRows.length,
       sparseRowThreshold,
-      skippedRowNumbers: excludedRows.map((row) => row.sourceRowNumber),
+      excludedRowCount: excludedRows.length,
+      excludedRowRanges: compressRowRanges(excludedRows),
     },
     filterOptions,
     columnStats: columns.map((column) => ({ ...column, uniqueCount: uniqueCounts[column.index] })),

@@ -31,7 +31,7 @@ export default function CalendarImportPanel({ onImported }) {
   }
 
   async function handleImport() {
-    if (!parsed) return
+    if (!parsed || !parsed.validRows.length) return
     setError('')
     setStatus('importing')
     setProgress({ done: 0, total: parsed.validRows.length })
@@ -59,10 +59,10 @@ export default function CalendarImportPanel({ onImported }) {
       {parsed && <div className="preview-area">
         <div className="preview-stats"><span><strong>{parsed.sheetName}</strong> sheet</span><span><strong>{parsed.rows.length}</strong> dòng dữ liệu</span><span><strong>{parsed.columns.length}</strong> cột</span><span><strong>{parsed.validRows.length}</strong> hợp lệ</span><span><strong>{parsed.skippedRows}</strong> bỏ qua</span></div>
         <div className="column-list"><strong>Các cột:</strong> {parsed.columns.map((column) => <span key={column.key}>{column.label}</span>)}</div>
-        {parsed.warnings.length > 0 && <div className="warning-box"><strong>Cảnh báo validation</strong>{parsed.warnings.map((warning) => <div key={warning}>{warning}</div>)}</div>}
         <div className="table-scroll"><table><thead><tr>{parsed.columns.slice(0, 8).map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{parsed.previewRows.slice(0, 5).map((row) => <tr key={row.sourceRowNumber}>{parsed.columns.slice(0, 8).map((column) => <td key={column.key}>{String(row.values[column.index] ?? '')}</td>)}</tr>)}</tbody></table></div>
         <button className="primary-button" onClick={handleImport} disabled={isImporting || !parsed.validRows.length}>{isImporting ? `Đang import ${progress.done}/${progress.total}` : 'XÁC NHẬN IMPORT'}</button>
         {isImporting && <progress className="import-progress" value={progress.done} max={progress.total} />}
+        {(isImporting || status === 'success') && parsed.warnings.length > 0 && <div className="warning-box"><strong>Cảnh báo validation (không chặn import)</strong>{parsed.warnings.map((warning) => <div key={warning}>{warning}</div>)}</div>}
         {status === 'success' && <p className="success-message">Import thành công. Batch mới đã sẵn sàng để tra cứu.</p>}
       </div>}
     </section>
