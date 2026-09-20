@@ -39,7 +39,7 @@ export default function CalendarLookupPage() {
     setLoading(true); setMessage('')
     try {
       const cleanFilters = Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== ''))
-      if (dateField) {
+      if (dateField && (filters.__rangeStart || filters.__rangeEnd)) {
         cleanFilters.__rangeKey = dateField.key
         cleanFilters.__rangeStart = filters.__rangeStart === '' ? '' : (filters.__rangeStart ? Number(filters.__rangeStart) || filters.__rangeStart : '')
         cleanFilters.__rangeEnd = filters.__rangeEnd === '' ? '' : (filters.__rangeEnd ? Number(filters.__rangeEnd) || filters.__rangeEnd : '')
