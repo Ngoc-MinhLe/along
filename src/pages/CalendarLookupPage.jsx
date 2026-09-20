@@ -89,7 +89,13 @@ export default function CalendarLookupPage() {
     } catch (error) { setMessage(error.message) } finally { setLoading(false) }
   }
 
-  function setFilter(key, value) { setFilters((current) => ({ ...current, [key]: value })) }
+  function setFilter(key, value) {
+    setFilters((current) => ({ ...current, [key]: value }))
+    const column = columns.find((item) => item.key === key)
+    if (column && !BASIC_FILTERS.includes(column.label)) {
+      setActiveAdvancedKeys((current) => value ? (current.includes(key) ? current : [...current, key]) : current.filter((item) => item !== key))
+    }
+  }
   function addAdvancedField(key) { setActiveAdvancedKeys((current) => current.includes(key) ? current : [...current, key]) }
   function removeFilter(key) {
     setFilters((current) => { const next = { ...current }; delete next[key]; return next })
@@ -116,7 +122,11 @@ export default function CalendarLookupPage() {
 
   const activeChips = []
   if (filters.__rangeStart || filters.__rangeEnd) activeChips.push({ key: '__range', label: `Dương lịch: ${filters.__rangeStart || ''} → ${filters.__rangeEnd || ''}`, remove: () => { setFilter('__rangeStart', ''); setFilter('__rangeEnd', '') } })
-  ;[...basicFields, ...activeAdvancedColumns].forEach((column) => { if (filters[column.key]) activeChips.push({ key: column.key, label: `${column.label}: ${filters[column.key]}`, remove: () => removeFilter(column.key) }) })
+  columns.forEach((column) => {
+    if (filters[column.key] !== undefined && filters[column.key] !== '') {
+      activeChips.push({ key: column.key, label: `${column.label}: ${filters[column.key]}`, remove: () => removeFilter(column.key) })
+    }
+  })
 
   return (
     <section className="page-section">
