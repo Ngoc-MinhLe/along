@@ -104,26 +104,33 @@ export async function importCalendarRows(parsed, onProgress) {
 function makeCalendarQuery(importId, filters, cursor, pageSize) {
   const entries = collection(requireFirestore(), IMPORTS, importId, 'entries')
   const constraints = []
+  const hasRange = Boolean(filters.__rangeKey && (filters.__rangeStart !== '' || filters.__rangeEnd !== ''))
   Object.entries(filters).forEach(([key, value]) => {
     if (key.startsWith('__')) return
     if (value !== '' && value !== undefined && value !== null) constraints.push(where(`search.${key}`, '==', String(value)))
   })
-  if (filters.__rangeKey) {
+  if (hasRange) {
     if (filters.__rangeStart !== '') constraints.push(where(`range.${filters.__rangeKey}`, '>=', filters.__rangeStart))
     if (filters.__rangeEnd !== '') constraints.push(where(`range.${filters.__rangeKey}`, '<=', filters.__rangeEnd))
-    // Firestore requires the inequality field to be the first orderBy field.
+    // The range field is the only orderBy field. Do not append __name__ after it.
     constraints.push(orderBy(`range.${filters.__rangeKey}`, 'asc'))
+  } else {
+    constraints.push(orderBy('__name__'))
   }
-  constraints.push(orderBy('__name__'))
   constraints.push(limit(pageSize))
   if (cursor) constraints.push(startAfter(cursor))
+  console.debug('[Firestore] calendar query plan', {
+    where: Object.entries(filters).filter(([key, value]) => !key.startsWith('__') && value !== '' && value !== undefined && value !== null).map(([key, value]) => [`search.${key}`, '==', String(value)]).concat(hasRange ? [[`range.${filters.__rangeKey}`, '>=/<=']] : []),
+    orderBy: hasRange ? [`range.${filters.__rangeKey} ASC`] : ['__name__ ASC'],
+  })
   return query(entries, ...constraints)
 }
 
 function makeFallbackQuery(importId, filters, cursor, pageSize) {
   const entries = collection(requireFirestore(), IMPORTS, importId, 'entries')
   const constraints = []
-  if (filters.__rangeKey) {
+  const hasRange = Boolean(filters.__rangeKey && (filters.__rangeStart !== '' || filters.__rangeEnd !== ''))
+  if (hasRange) {
     if (filters.__rangeStart !== '') constraints.push(where(`range.${filters.__rangeKey}`, '>=', filters.__rangeStart))
     if (filters.__rangeEnd !== '') constraints.push(where(`range.${filters.__rangeKey}`, '<=', filters.__rangeEnd))
     constraints.push(orderBy(`range.${filters.__rangeKey}`, 'asc'))
