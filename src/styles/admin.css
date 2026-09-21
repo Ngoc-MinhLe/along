@@ -13,3 +13,52 @@
 .system-role-readonly > span { margin: 0; color: #718680; font-size: 11px; }
 .system-role-locked { border-color: #e1c98e; background: #fff8e8; }
 .system-role-locked small { color: #87651f; background: #f7e7b9; }
+.admin-roles-page { display: grid; gap: 20px; }
+.system-role-hierarchy { display: grid; gap: 7px; margin-top: 20px; }
+.system-role-card { border: 1px solid #dce8e2; border-radius: 10px; background: #fbfdfc; }
+.system-role-card[open] { border-color: #a9cfc1; box-shadow: 0 8px 24px rgba(27, 83, 72, .06); }
+.system-role-card summary { display: flex; justify-content: space-between; gap: 16px; padding: 14px 16px; color: #315a52; cursor: pointer; list-style: none; }
+.system-role-card summary::-webkit-details-marker { display: none; }
+.system-role-card summary > div:last-child { text-align: right; }
+.system-role-card summary strong, .system-role-card summary small, .system-role-card summary span { display: block; }
+.system-role-card summary small { margin-top: 4px; color: #829690; font-size: 10px; }
+.system-role-card summary span { color: #17665b; font-size: 11px; font-weight: 700; }
+.hierarchy-arrow { color: #8aa29a; font-size: 18px; line-height: 1; text-align: center; }
+.role-permission-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px 16px 16px; border-top: 1px solid #edf2ef; }
+.role-permission-groups section { min-width: 0; padding: 10px; border-radius: 7px; background: #f4f8f6; }
+.role-permission-groups section > strong { margin-bottom: 7px; color: #315a52; font-size: 11px; }
+.role-permission-groups section > div { display: grid; gap: 5px; }
+.role-permission-groups section span { margin: 0; overflow-wrap: anywhere; font-size: 10px; }
+.role-permission-groups section > small { color: #9aaba6; }
+.permission-granted { color: #287b5a !important; }
+.permission-missing { color: #a9b4b0 !important; }
+.role-permission-groups .invalid-permissions { background: #fff3f0; }
+.role-permission-groups .invalid-permissions span { color: #a44d46; }
+.custom-role-list { display: grid; gap: 12px; margin-top: 20px; }
+.custom-role-card { padding: 16px; border: 1px solid #dce8e2; border-radius: 10px; background: #fff; }
+.custom-role-card.is-disabled { border-color: #e2e5e3; background: #f7f8f7; }
+.custom-role-main { display: flex; justify-content: space-between; gap: 20px; }
+.custom-role-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.custom-role-title strong { color: #315a52; }
+.custom-role-card code { display: inline-block; margin-top: 5px; color: #829690; font-size: 10px; }
+.custom-role-card p { margin-top: 8px; }
+.custom-role-card small { color: #829690; font-size: 10px; }
+.custom-role-meta { flex: 0 0 auto; text-align: right; }
+.custom-role-meta span { margin-top: 0; color: #829690; font-size: 10px; }
+.role-status-badge { display: inline-block !important; margin: 0 !important; padding: 3px 7px; border-radius: 12px; font-size: 9px !important; font-weight: 700; text-transform: uppercase; }
+.role-status-badge.active { color: #287b5a; background: #e7f5eb; }
+.role-status-badge.disabled { color: #87651f; background: #fff1c9; }
+.custom-role-card .admin-row-actions { margin-top: 14px; }
+.custom-role-permission-view { margin-top: 15px; border: 1px solid #dce8e2; border-radius: 8px; background: #fbfdfc; }
+.custom-role-permission-view > div:first-child { display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px 0; }
+.custom-role-permission-view > p { padding: 0 16px; }
+.role-delete-note { color: #87651f !important; font-size: 10px !important; }
+.permission-help { margin-bottom: 12px !important; }
+.role-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(20, 45, 40, .48); }
+.role-confirm-modal { width: min(440px, 100%); padding: 22px; border-radius: 12px; background: #fff; box-shadow: 0 24px 70px rgba(0, 0, 0, .2); }
+.role-confirm-modal h3 { margin: 0 0 10px; color: #315a52; }
+.role-confirm-modal p { color: #718680; font-size: 12px; line-height: 1.6; }
+.role-confirm-modal .admin-form-actions { justify-content: flex-end; margin-top: 18px; }
+.admin-danger-button { border: 1px solid #a44d46; border-radius: 7px; padding: 9px 12px; color: #fff; background: #a44d46; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.admin-danger-button:disabled { cursor: not-allowed; opacity: .5; }
+@media (max-width: 720px) { .role-permission-groups { grid-template-columns: 1fr; }.custom-role-main { display: block; }.custom-role-meta { margin-top: 12px; text-align: left; }.system-role-card summary { align-items: start; }.custom-role-section .admin-primary-button { margin-top: 12px; } }

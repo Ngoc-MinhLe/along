@@ -9,7 +9,7 @@ export function generateRoleId(name) {
     .replace(/^_+|_+$/g, '')
     .replace(/_+/g, '_')
 
-  const base = normalized === 'QUAN_LY_NOI_DUNG' ? 'CONTENT_MANAGER' : normalized || 'CUSTOM_ROLE'
+  const base = normalized || 'CUSTOM_ROLE'
   const validBase = /^[A-Z]/.test(base) ? base : `ROLE_${base}`
   return validBase.slice(0, 64).replace(/_+$/, '') || 'CUSTOM_ROLE'
 }
