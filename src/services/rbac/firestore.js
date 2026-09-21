@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -25,6 +26,13 @@ export async function listCustomRoles() {
   return snapshot.docs
     .map((item) => ({ id: item.id, ...item.data() }))
     .filter((role) => role.type === 'CUSTOM')
+}
+
+export async function getCustomRolesByIds(roleIds = []) {
+  const database = requireDb()
+  const uniqueRoleIds = [...new Set(roleIds.filter((roleId) => typeof roleId === 'string' && roleId))]
+  const snapshots = await Promise.all(uniqueRoleIds.map((roleId) => getDoc(doc(database, 'roles', roleId))))
+  return snapshots.filter((snapshot) => snapshot.exists()).map((snapshot) => ({ id: snapshot.id, ...snapshot.data() }))
 }
 
 export async function listUsers() {

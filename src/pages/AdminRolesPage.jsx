@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { PERMISSION_VALUES } from '../services/rbac/permissions'
+import { usePermissions } from '../auth/PermissionContext'
+import { PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
 import { CUSTOM_ROLE_FORBIDDEN_PERMISSIONS, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { ROLE_HIERARCHY } from '../services/rbac/roles'
 import { createCustomRole, listCustomRoles, listUsers, removeCustomRole, setCustomRoleStatus, updateCustomRole } from '../services/rbac/firestore'
@@ -38,6 +39,16 @@ function formatDate(value) {
 
 export default function AdminRolesPage() {
   const { user } = useAuth()
+  const { hasPermission } = usePermissions()
+  const canReadUsers = hasPermission(PERMISSIONS.USERS_READ)
+  const canCreate = hasPermission(PERMISSIONS.ROLES_CREATE)
+  const hasTrustedRoleMutation = hasPermission(PERMISSIONS.ROLES_UPDATE)
+    || hasPermission(PERMISSIONS.ROLES_DISABLE)
+    || hasPermission(PERMISSIONS.ROLES_DELETE)
+  // Permission/status/delete changes require propagation to affected users.
+  const canUpdate = false
+  const canDisable = false
+  const canDelete = false
   const [roles, setRoles] = useState([])
   const [users, setUsers] = useState([])
   const [form, setForm] = useState(emptyForm)
@@ -54,7 +65,7 @@ export default function AdminRolesPage() {
     setLoading(true)
     setError('')
     try {
-      const [nextRoles, nextUsers] = await Promise.all([listCustomRoles(), listUsers()])
+      const [nextRoles, nextUsers] = await Promise.all([listCustomRoles(), canReadUsers ? listUsers() : Promise.resolve([])])
       setRoles(nextRoles)
       setUsers(nextUsers)
     } catch (loadError) {
@@ -72,6 +83,7 @@ export default function AdminRolesPage() {
   }, {}), [users])
 
   function openCreate() {
+    if (!canCreate) return
     setEditingId('')
     setForm(emptyForm)
     setError('')
@@ -80,6 +92,7 @@ export default function AdminRolesPage() {
   }
 
   function openEdit(role) {
+    if (!canUpdate) return
     setEditingId(role.id)
     setForm({ id: role.id, name: role.name || '', description: role.description || '', permissions: role.permissions || [], status: role.status })
     setError('')
@@ -98,6 +111,11 @@ export default function AdminRolesPage() {
 
   async function saveRole(event) {
     event.preventDefault()
+    const requiredPermission = editingId ? PERMISSIONS.ROLES_UPDATE : PERMISSIONS.ROLES_CREATE
+    if (!hasPermission(requiredPermission)) {
+      setError(`Bạn không có quyền ${requiredPermission}.`)
+      return
+    }
     setSaving(true)
     setError('')
     setMessage('')
@@ -121,6 +139,10 @@ export default function AdminRolesPage() {
   }
 
   async function changeStatus(role) {
+    if (!canDisable) {
+      setError(`Bạn không có quyền ${PERMISSIONS.ROLES_DISABLE}.`)
+      return
+    }
     setSaving(true)
     setError('')
     setMessage('')
@@ -137,6 +159,10 @@ export default function AdminRolesPage() {
   }
 
   function requestDelete(role) {
+    if (!canDelete) {
+      setError(`Bạn không có quyền ${PERMISSIONS.ROLES_DELETE}.`)
+      return
+    }
     if (assignedCounts[role.id]) {
       setError('Role đang được gán cho người dùng, không thể xóa.')
       return
@@ -177,7 +203,8 @@ export default function AdminRolesPage() {
     </section>
 
     <section className="admin-card custom-role-section">
-      <div className="admin-section-heading"><div><h3>Custom Roles</h3><p>Custom Roles độc lập với hierarchy và chỉ nhận permission được policy cho phép.</p></div><button className="admin-primary-button" type="button" onClick={openCreate}>+ Tạo Custom Role</button></div>
+      <div className="admin-section-heading"><div><h3>Custom Roles</h3><p>Custom Roles độc lập với hierarchy và chỉ nhận permission được policy cho phép.</p></div>{canCreate && <button className="admin-primary-button" type="button" onClick={openCreate}>+ Tạo Custom Role</button>}</div>
+      {hasTrustedRoleMutation && <p className="admin-warning">Đổi permission/trạng thái hoặc xóa role phải chạy qua trusted Admin SDK tool để rebuild authorization cho tất cả user bị ảnh hưởng.</p>}
       {message && <p className="admin-success" role="status">{message}</p>}
       {error && <p className="admin-error" role="alert">{error}</p>}
       {showForm && <RoleForm form={form} editing={Boolean(editingId)} saving={saving} onChange={setForm} onTogglePermission={togglePermission} onSubmit={saveRole} onCancel={() => { setShowForm(false); setEditingId('') }} />}
@@ -191,7 +218,7 @@ export default function AdminRolesPage() {
             <div><div className="custom-role-title"><strong>{role.name}</strong><span className={`role-status-badge ${role.status}`}>{role.status}</span></div><code>{role.id}</code><p>{role.description || 'Không có mô tả'}</p><small>{(role.permissions || []).length} quyền · {assignedCount} người dùng</small></div>
             <div className="custom-role-meta"><span>Created by: {role.createdBy || '—'}</span><span>Created: {formatDate(role.createdAt)}</span><span>Updated: {formatDate(role.updatedAt)}</span></div>
           </div>
-          <div className="admin-row-actions"><button type="button" onClick={() => setViewingRoleId(isViewing ? '' : role.id)}>{isViewing ? 'Ẩn quyền' : 'Xem quyền'}</button><button type="button" onClick={() => openEdit(role)}>Sửa quyền</button><button type="button" onClick={() => changeStatus(role)} disabled={saving}>{role.status === 'active' ? 'Disable' : 'Enable'}</button><button type="button" onClick={() => requestDelete(role)} disabled={Boolean(assignedCount) || saving}>Xóa</button></div>
+          <div className="admin-row-actions"><button type="button" onClick={() => setViewingRoleId(isViewing ? '' : role.id)}>{isViewing ? 'Ẩn quyền' : 'Xem quyền'}</button>{canUpdate && <button type="button" onClick={() => openEdit(role)}>Sửa quyền</button>}{canDisable && <button type="button" onClick={() => changeStatus(role)} disabled={saving}>{role.status === 'active' ? 'Disable' : 'Enable'}</button>}{canDelete && <button type="button" onClick={() => requestDelete(role)} disabled={Boolean(assignedCount) || saving}>Xóa</button>}</div>
           {assignedCount > 0 && <p className="role-delete-note">Role đang được gán cho người dùng, không thể xóa.</p>}
           {isViewing && <div className="custom-role-permission-view"><div><strong>{role.name}</strong><span>{(role.permissions || []).length} quyền</span></div><p>{role.description || 'Không có mô tả'}</p><PermissionCatalogView assignedPermissions={role.permissions || []} /></div>}
         </article>

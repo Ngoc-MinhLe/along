@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import CalendarImportPanel from '../components/CalendarImportPanel'
+import { usePermissions } from '../auth/PermissionContext'
 import { listCalendarImports, searchCalendarEntries } from '../services/calendarImports'
+import { PERMISSIONS } from '../services/rbac/permissions'
 
 const PAGE_SIZE = 25
 const BASIC_FILTERS = ['AL-Ng', 'AL-T']
@@ -40,6 +42,10 @@ function FilterValueControl({ column, value, options, onChange }) {
 }
 
 export default function CalendarLookupPage() {
+  const { hasPermission, loading: permissionsLoading } = usePermissions()
+  const canSearch = hasPermission(PERMISSIONS.CALENDAR_SEARCH)
+  const canImport = hasPermission(PERMISSIONS.CALENDAR_IMPORT)
+  const canExport = hasPermission(PERMISSIONS.CALENDAR_EXPORT)
   const [imports, setImports] = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [filters, setFilters] = useState({})
@@ -63,7 +69,7 @@ export default function CalendarLookupPage() {
     } catch (error) { setMessage(error.message) }
   }
 
-  useEffect(() => { loadImports() }, [])
+  useEffect(() => { if (!permissionsLoading && canSearch) loadImports() }, [canSearch, permissionsLoading])
   const selectedImport = imports.find((item) => item.id === selectedId)
   const columns = selectedImport?.columns || []
   const filterGroups = useMemo(() => makeFilterGroups(columns), [columns])
@@ -74,6 +80,10 @@ export default function CalendarLookupPage() {
   const resultColumns = RESULT_COLUMNS.map((label) => columns.find((column) => column.label === label)).filter(Boolean)
 
   async function search(reset = true) {
+    if (!canSearch) {
+      setMessage('Bạn không có quyền calendar.search.')
+      return
+    }
     if (!selectedId) return
     setLoading(true); setMessage('')
     try {
@@ -108,6 +118,10 @@ export default function CalendarLookupPage() {
   function handleImportDone() { setRows([]); setCursor(null); loadImports() }
 
   function exportResults() {
+    if (!canExport) {
+      setMessage('Bạn không có quyền calendar.export.')
+      return
+    }
     if (!selectedImport || !rows.length) return
     const worksheetRows = [columns.map((column) => column.label), ...rows.map((row) => columns.map((column) => row.sourceFields?.[column.label] ?? ''))]
     const sheet = XLSX.utils.aoa_to_sheet(worksheetRows)
@@ -131,9 +145,11 @@ export default function CalendarLookupPage() {
   return (
     <section className="page-section">
       <div className="page-title-row"><div><p className="eyebrow">MODULE 1</p><h2>Tra cứu lịch</h2><p className="lead">Chọn bộ dữ liệu và các tiêu chí cần thiết để tra cứu trực tiếp từ Firestore.</p></div><span className="phase-badge">Đang hoạt động</span></div>
-      <CalendarImportPanel onImported={handleImportDone} />
+      {canImport && <CalendarImportPanel onImported={handleImportDone} />}
       <section className="lookup-card">
-        <div className="card-heading"><div><p className="eyebrow">FIRESTORE</p><h3>Tìm kiếm dữ liệu lịch</h3></div><button className="secondary-button" onClick={exportResults} disabled={!rows.length}>Xuất kết quả ra Excel</button></div>
+        <div className="card-heading"><div><p className="eyebrow">FIRESTORE</p><h3>Tìm kiếm dữ liệu lịch</h3></div>{canExport && <button className="secondary-button" onClick={exportResults} disabled={!rows.length}>Xuất kết quả ra Excel</button>}</div>
+        {!canSearch && <div className="access-denied" role="alert"><h3>Không có quyền tra cứu</h3><p>Tài khoản hiện tại không có quyền <code>calendar.search</code>.</p></div>}
+        {canSearch && <>
         <div className="basic-filter-panel">
           <div className="filter-grid">
             <label>Bộ dữ liệu<select value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setRows([]); setCursor(null) }}><option value="">-- Chọn lần import --</option>{imports.map((item) => <option key={item.id} value={item.id}>{item.fileName} · {item.recordCount} dòng · {formatTimestamp(item.createdAt)}</option>)}</select></label>
@@ -153,6 +169,7 @@ export default function CalendarLookupPage() {
         {activeChips.length > 0 && <div className="condition-summary"><strong>Điều kiện tra cứu:</strong><div className="condition-chips">{activeChips.map((chip) => <button key={chip.key} className="condition-chip" onClick={chip.remove}>{chip.label} <span>×</span></button>)}</div></div>}
         {!selectedId && <div className="empty-state"><span>⌕</span><h3>Chưa chọn bộ dữ liệu</h3><p>Hãy chọn một batch dữ liệu để bắt đầu tra cứu.</p></div>}
         {selectedId && <><div className="result-summary">Hiển thị <strong>{rows.length}</strong> bản ghi trong phiên tra cứu.</div><div className="table-scroll result-table"><table><thead><tr>{resultColumns.map((column) => <th key={column.key}>{column.label}</th>)}<th>Chi tiết</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{resultColumns.map((column) => <td key={column.key}>{String(row.sourceFields?.[column.label] ?? '')}</td>)}<td><button className="detail-button" onClick={() => setDetailRow(row)}>Xem chi tiết</button></td></tr>)}</tbody></table>{!rows.length && !loading && <p className="muted-text table-empty">Chưa có kết quả. Chọn bộ lọc và bấm Tìm kiếm.</p>}</div>{hasMore && <button className="secondary-button load-more" onClick={() => search(false)} disabled={loading}>Tải thêm</button>}</>}
+        </>}
       </section>
       {detailRow && <div className="detail-backdrop" onClick={() => setDetailRow(null)}><div className="detail-panel" onClick={(event) => event.stopPropagation()}><div className="detail-header"><div><p className="eyebrow">BẢN GHI LỊCH</p><h3>Chi tiết đầy đủ</h3></div><button className="close-button" onClick={() => setDetailRow(null)}>×</button></div><div className="detail-grid">{columns.map((column) => <div className="detail-item" key={column.key}><span>{column.label}</span><strong>{String(detailRow.sourceFields?.[column.label] ?? '') || '—'}</strong></div>)}</div></div></div>}
     </section>

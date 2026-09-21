@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { PERMISSION_VALUES } from '../services/rbac/permissions'
-import { getEffectivePermissions, getSystemRole, ROLE_PERMISSIONS } from '../services/rbac/policy'
+import { usePermissions } from '../auth/PermissionContext'
+import { PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
+import { canManageUserRole, getEffectivePermissions, getSystemRole, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { ROLE_HIERARCHY, SYSTEM_ROLES } from '../services/rbac/roles'
 import { assignCustomRole, listCustomRoles, listUsers, revokeCustomRole } from '../services/rbac/firestore'
 
@@ -49,6 +50,12 @@ function permissionGroups(permissions) {
 
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth()
+  const { actor, hasPermission } = usePermissions()
+  const hasTrustedRoleMutation = hasPermission(PERMISSIONS.ROLES_ASSIGN) || hasPermission(PERMISSIONS.ROLES_REVOKE)
+  // Assign/revoke must also rebuild userAuthorizations atomically via Admin SDK.
+  // Browser mutation is intentionally disabled even when the actor has permission.
+  const canAssign = false
+  const canRevoke = false
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [selectedId, setSelectedId] = useState('')
@@ -123,7 +130,16 @@ export default function AdminUsersPage() {
   }
 
   async function mutateCustomRole(action, roleId) {
+    const requiredPermission = action === 'assign' ? PERMISSIONS.ROLES_ASSIGN : PERMISSIONS.ROLES_REVOKE
+    if (!hasPermission(requiredPermission)) {
+      setError(`Bạn không có quyền ${requiredPermission}.`)
+      return false
+    }
     if (!selected || isProtectedTarget(selected, currentUser)) return false
+    if (!canManageUserRole(actor, selected, roleId, roleMap, action)) {
+      setError('Policy không cho phép thay đổi Custom Role này.')
+      return false
+    }
     setBusy(true)
     setError('')
     setMessage('')
@@ -169,7 +185,7 @@ export default function AdminUsersPage() {
       </>}
     </div>
 
-    {selected && <UserDrawer user={selected} roleMap={roleMap} activeRoles={availableRoles} roleToAssign={roleToAssign} setRoleToAssign={setRoleToAssign} currentUser={currentUser} busy={busy} onClose={() => setSelectedId('')} onAssign={() => { mutateCustomRole('assign', roleToAssign); setRoleToAssign('') }} onRevoke={(roleId) => setRevokeTarget({ user: selected, roleId })} />}
+    {selected && <UserDrawer user={selected} roleMap={roleMap} activeRoles={availableRoles} roleToAssign={roleToAssign} setRoleToAssign={setRoleToAssign} currentUser={currentUser} busy={busy} canAssign={canAssign} canRevoke={canRevoke} trustedRoleManagement={hasTrustedRoleMutation} onClose={() => setSelectedId('')} onAssign={() => { mutateCustomRole('assign', roleToAssign); setRoleToAssign('') }} onRevoke={(roleId) => setRevokeTarget({ user: selected, roleId })} />}
     {revokeTarget && <RevokeModal target={revokeTarget} roleMap={roleMap} busy={busy} onCancel={() => setRevokeTarget(null)} onConfirm={confirmRevoke} />}
   </section>
 }
@@ -187,7 +203,7 @@ function UserRow({ user, roleMap, onSelect }) {
   </tr>
 }
 
-function UserDrawer({ user, roleMap, activeRoles, roleToAssign, setRoleToAssign, currentUser, busy, onClose, onAssign, onRevoke }) {
+function UserDrawer({ user, roleMap, activeRoles, roleToAssign, setRoleToAssign, currentUser, busy, canAssign, canRevoke, trustedRoleManagement, onClose, onAssign, onRevoke }) {
   const systemRole = getSystemRole(user)
   const rootTarget = isRootUser(user)
   const protectedTarget = isProtectedTarget(user, currentUser)
@@ -199,7 +215,7 @@ function UserDrawer({ user, roleMap, activeRoles, roleToAssign, setRoleToAssign,
       <div className="drawer-header"><div><h3 id="user-detail-title">Chi tiết người dùng</h3><p>{user.email || user.uid}</p></div><button type="button" className="drawer-close-button" onClick={onClose} aria-label="Đóng">×</button></div>
       <section className="drawer-section"><h4>Thông tin người dùng</h4><div className="drawer-profile-heading">{user.photoURL ? <img src={user.photoURL} alt="" /> : <span className="user-avatar-fallback large">{initials(user)}</span>}<div><strong>{user.displayName || 'Chưa có tên'}</strong><small>{user.email || '—'}</small></div></div><dl className="user-detail-meta"><div><dt>UID</dt><dd>{user.uid || user.id}</dd></div><div><dt>Status</dt><dd>{user.status || 'active'}</dd></div><div><dt>Created At</dt><dd>{formatDate(user.createdAt)}</dd></div><div><dt>Last Login</dt><dd>{formatDate(user.lastLoginAt)}</dd></div></dl></section>
       <section className="drawer-section"><h4>System Role</h4><div className={`drawer-system-role ${rootTarget ? 'root' : ''}`}><span className="system-role-badge">{systemRole}</span><strong>{rootTarget ? '🔒 ROOT PROTECTED' : 'READ ONLY'}</strong></div><p className="drawer-note">System Role và status không được chỉnh sửa trên browser.</p></section>
-      <section className="drawer-section"><h4>Custom Roles</h4><div className="drawer-assigned-roles">{assignedRoles.length ? assignedRoles.map(({ id, role }) => <div className="drawer-role-item" key={id}><div><strong>{roleLabel(role)}</strong><span className={role.status === 'disabled' ? 'disabled-text' : ''}>{role.status} · {(role.permissions || []).length} quyền</span></div><button type="button" onClick={() => onRevoke(id)} disabled={busy || protectedTarget}>Thu hồi</button></div>) : <p className="admin-muted">Chưa có Custom Role.</p>}</div><div className="drawer-assign-row"><select value={roleToAssign} onChange={(event) => setRoleToAssign(event.target.value)} disabled={busy || protectedTarget}><option value="">Chọn Custom Role active</option>{activeRoles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.id})</option>)}</select><button type="button" className="admin-primary-button" onClick={onAssign} disabled={!roleToAssign || busy || protectedTarget}>+ Gán</button></div>{protectedTarget && <p className="admin-warning">{rootTarget ? 'ROOT được bảo vệ, không thể quản lý Custom Role trên browser.' : 'Không thể tự thay đổi Custom Role của chính mình.'}</p>}</section>
+      <section className="drawer-section"><h4>Custom Roles</h4><div className="drawer-assigned-roles">{assignedRoles.length ? assignedRoles.map(({ id, role }) => <div className="drawer-role-item" key={id}><div><strong>{roleLabel(role)}</strong><span className={role.status === 'disabled' ? 'disabled-text' : ''}>{role.status} · {(role.permissions || []).length} quyền</span></div>{canRevoke && <button type="button" onClick={() => onRevoke(id)} disabled={busy || protectedTarget}>Thu hồi</button>}</div>) : <p className="admin-muted">Chưa có Custom Role.</p>}</div>{canAssign && <div className="drawer-assign-row"><select value={roleToAssign} onChange={(event) => setRoleToAssign(event.target.value)} disabled={busy || protectedTarget}><option value="">Chọn Custom Role active</option>{activeRoles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.id})</option>)}</select><button type="button" className="admin-primary-button" onClick={onAssign} disabled={!roleToAssign || busy || protectedTarget}>+ Gán</button></div>}{!canAssign && !canRevoke && <p className="drawer-note">{trustedRoleManagement ? 'Gán/thu hồi role phải chạy qua trusted Admin SDK tool để đồng bộ authorization.' : 'Custom Roles chỉ đọc với tài khoản hiện tại.'}</p>}{protectedTarget && <p className="admin-warning">{rootTarget ? 'ROOT được bảo vệ, không thể quản lý Custom Role trên browser.' : 'Không thể tự thay đổi Custom Role của chính mình.'}</p>}</section>
       <section className="drawer-section"><h4>Effective Permissions <small>{effectivePermissions.length} quyền</small></h4>{effectivePermissions.length ? <div className="effective-permission-groups">{permissionGroups(effectivePermissions).map((group) => <div key={group.key}><strong>{group.label}</strong>{group.permissions.map((permission) => <div className="effective-permission-row" key={permission}><span>{permission}</span><div>{sourceMap[permission]?.system && <em className="permission-source system">SYSTEM</em>}{sourceMap[permission]?.custom?.map((roleId) => <em className="permission-source custom" key={roleId}>CUSTOM · {roleMap[roleId]?.id || roleId}</em>)}</div></div>)}</div>)}</div> : <p className="admin-muted">Không có quyền hiệu lực.</p>}</section>
     </aside>
   </div>

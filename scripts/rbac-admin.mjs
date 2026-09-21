@@ -10,6 +10,11 @@ import {
 } from '../src/services/rbac/policy.js'
 import { PERMISSION_VALUES } from '../src/services/rbac/permissions.js'
 import { isSystemRole, SYSTEM_ROLES } from '../src/services/rbac/roles.js'
+import {
+  materializeUsersAssignedRole,
+  updateUserCustomRolesAndAuthorization,
+} from './lib/authorization-admin.mjs'
+import { confirmTrustedMutation } from './lib/cli-confirm.mjs'
 
 const projectId = process.env.FIREBASE_PROJECT_ID || 'along-6e1ce'
 const app = getApps()[0] || initializeApp({ credential: applicationDefault(), projectId })
@@ -18,6 +23,7 @@ const db = getFirestore(app)
 const users = db.collection('users')
 const roles = db.collection('roles')
 const command = process.argv[2]
+const dryRun = process.argv.includes('--dry-run')
 
 function option(name, fallback = '') {
   const value = process.argv.slice(3).find((arg) => arg.startsWith(`--${name}=`))
@@ -79,6 +85,8 @@ async function createRole(actor, roleMap) {
   assertCanManage(actor, role, 'create', roleMap)
   const ref = roles.doc(id)
   if ((await ref.get()).exists) throw new Error(`Role ${id} đã tồn tại.`)
+  if (dryRun) return console.log(`[DRY RUN] Would create custom role ${id}.`)
+  await confirmTrustedMutation(`Create Custom Role ${id}?`)
   const now = Timestamp.now()
   await ref.set({ ...role, createdAt: now, updatedAt: now, createdBy: actor.uid })
   console.log(`Created custom role ${id}`)
@@ -100,8 +108,11 @@ async function updateRole(actor, roleMap) {
   }
   assertValidRole(next)
   assertCanManage(actor, next, 'update', roleMap)
+  if (dryRun) return console.log(`[DRY RUN] Would update custom role ${id} and rebuild affected authorizations.`)
+  await confirmTrustedMutation(`Update Custom Role ${id} and rebuild all affected user authorizations?`)
   await ref.set({ name: next.name, description: next.description, permissions: next.permissions, updatedAt: next.updatedAt }, { merge: true })
-  console.log(`Updated custom role ${id}`)
+  const affected = await materializeUsersAssignedRole(id)
+  console.log(`Updated custom role ${id}; rebuilt ${affected.length} authorizations.`)
 }
 
 async function disableRole(actor, roleMap) {
@@ -111,8 +122,25 @@ async function disableRole(actor, roleMap) {
   if (!snapshot.exists || snapshot.data().type !== 'CUSTOM') throw new Error('Chỉ được disable Custom Role tồn tại.')
   const role = { id, ...snapshot.data() }
   assertCanManage(actor, role, 'disable', roleMap)
+  if (dryRun) return console.log(`[DRY RUN] Would disable custom role ${id} and rebuild affected authorizations.`)
+  await confirmTrustedMutation(`Disable Custom Role ${id} and rebuild all affected user authorizations?`)
   await ref.set({ status: 'disabled', updatedAt: Timestamp.now() }, { merge: true })
-  console.log(`Disabled custom role ${id}`)
+  const affected = await materializeUsersAssignedRole(id)
+  console.log(`Disabled custom role ${id}; rebuilt ${affected.length} authorizations.`)
+}
+
+async function enableRole(actor, roleMap) {
+  const id = requiredOption('role-id')
+  const ref = roles.doc(id)
+  const snapshot = await ref.get()
+  if (!snapshot.exists || snapshot.data().type !== 'CUSTOM') throw new Error('Chỉ được enable Custom Role tồn tại.')
+  const role = { id, ...snapshot.data() }
+  assertCanManage(actor, role, 'disable', roleMap)
+  if (dryRun) return console.log(`[DRY RUN] Would enable custom role ${id} and rebuild affected authorizations.`)
+  await confirmTrustedMutation(`Enable Custom Role ${id} and rebuild all affected user authorizations?`)
+  await ref.set({ status: 'active', updatedAt: Timestamp.now() }, { merge: true })
+  const affected = await materializeUsersAssignedRole(id)
+  console.log(`Enabled custom role ${id}; rebuilt ${affected.length} authorizations.`)
 }
 
 async function deleteRole(actor, roleMap) {
@@ -124,6 +152,8 @@ async function deleteRole(actor, roleMap) {
   assertCanManage(actor, role, 'delete', roleMap)
   const assigned = await users.where('customRoles', 'array-contains', id).limit(1).get()
   if (!assigned.empty) throw new Error(`Role ${id} đang được gán; hãy revoke hoặc disable trước khi xóa.`)
+  if (dryRun) return console.log(`[DRY RUN] Would delete custom role ${id}.`)
+  await confirmTrustedMutation(`Delete unassigned Custom Role ${id}?`)
   await ref.delete()
   console.log(`Deleted custom role ${id}`)
 }
@@ -140,16 +170,11 @@ async function assignRole(actor, actorRoleMap) {
   const target = { ...targetProfile, uid: targetUid, claims: targetAuth.customClaims || {} }
   if (!canManageUserRole(actor, target, roleId, roleMap)) throw new Error(`Actor ${getSystemRole(actor)} không được assign ${roleId}.`)
 
-  const now = Timestamp.now()
-  if (isSystemRole(roleId)) {
-    const claims = { ...(targetAuth.customClaims || {}), systemRole: roleId, roleVersion: (targetAuth.customClaims?.roleVersion || 0) + 1 }
-    await auth.setCustomUserClaims(targetUid, claims)
-    await users.doc(targetUid).set({ systemRole: roleId, updatedAt: now }, { merge: true })
-  } else {
-    const customRoles = [...new Set([...(targetProfile.customRoles || []), roleId])]
-    await users.doc(targetUid).set({ customRoles, updatedAt: now }, { merge: true })
-  }
-  console.log(`Assigned ${roleId} to ${targetUid}`)
+  const customRoles = [...new Set([...(targetProfile.customRoles || []), roleId])]
+  if (dryRun) return console.log(`[DRY RUN] Would assign ${roleId} to ${targetUid} and rebuild authorization.`)
+  await confirmTrustedMutation(`Assign ${roleId} to ${targetUid} and rebuild user authorization?`)
+  const authorization = await updateUserCustomRolesAndAuthorization(targetUid, customRoles)
+  console.log(`Assigned ${roleId} to ${targetUid}; authorization version ${authorization.version}.`)
 }
 
 async function revokeRole(actor, actorRoleMap) {
@@ -162,16 +187,12 @@ async function revokeRole(actor, actorRoleMap) {
   const targetProfile = targetSnapshot.data()
   const target = { ...targetProfile, uid: targetUid, claims: targetAuth.customClaims || {} }
   if (target.claims.systemRole === SYSTEM_ROLES.ROOT_ADMIN || target.systemRole === SYSTEM_ROLES.ROOT_ADMIN) throw new Error('Không được revoke role của ROOT_ADMIN.')
-  if (isSystemRole(roleId)) {
-    if (!canManageUserRole(actor, target, roleId, actorRoleMap)) throw new Error(`Actor không được revoke ${roleId}.`)
-    const claims = { ...(targetAuth.customClaims || {}), systemRole: SYSTEM_ROLES.USER, roleVersion: (targetAuth.customClaims?.roleVersion || 0) + 1 }
-    await auth.setCustomUserClaims(targetUid, claims)
-    await users.doc(targetUid).set({ systemRole: SYSTEM_ROLES.USER, updatedAt: Timestamp.now() }, { merge: true })
-  } else {
-    const role = (await roles.doc(roleId).get()).data()
-    if (!role || !canManageRole(actor, { id: roleId, ...role }, 'assign', actorRoleMap)) throw new Error(`Actor không được revoke ${roleId}.`)
-    await users.doc(targetUid).set({ customRoles: (targetProfile.customRoles || []).filter((id) => id !== roleId), updatedAt: Timestamp.now() }, { merge: true })
-  }
+  const role = (await roles.doc(roleId).get()).data()
+  if (!role || !canManageRole(actor, { id: roleId, ...role }, 'revoke', actorRoleMap)) throw new Error(`Actor không được revoke ${roleId}.`)
+  const customRoles = (targetProfile.customRoles || []).filter((id) => id !== roleId)
+  if (dryRun) return console.log(`[DRY RUN] Would revoke ${roleId} from ${targetUid} and rebuild authorization.`)
+  await confirmTrustedMutation(`Revoke ${roleId} from ${targetUid} and rebuild user authorization?`)
+  await updateUserCustomRolesAndAuthorization(targetUid, customRoles)
   console.log(`Revoked ${roleId} from ${targetUid}`)
 }
 
@@ -180,10 +201,11 @@ async function main() {
   if (command === 'create-role') return createRole(actor, roleMap)
   if (command === 'update-role') return updateRole(actor, roleMap)
   if (command === 'disable-role') return disableRole(actor, roleMap)
+  if (command === 'enable-role') return enableRole(actor, roleMap)
   if (command === 'delete-role') return deleteRole(actor, roleMap)
   if (command === 'assign-role') return assignRole(actor, roleMap)
   if (command === 'revoke-role') return revokeRole(actor, roleMap)
-  throw new Error('Command không hợp lệ: create-role, update-role, disable-role, delete-role, assign-role, revoke-role')
+  throw new Error('Command không hợp lệ: create-role, update-role, disable-role, enable-role, delete-role, assign-role, revoke-role')
 }
 
 main().catch((error) => {

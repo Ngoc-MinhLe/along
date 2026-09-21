@@ -3,6 +3,8 @@ import {
   canAssignSystemRole,
   canManageRole,
   getEffectivePermissions,
+  hasAllPermissions,
+  hasAnyPermission,
   hasPermission,
   validateCustomRole,
 } from '../src/services/rbac/policy.js'
@@ -39,6 +41,12 @@ assert.equal(hasPermission(user, PERMISSIONS.CALENDAR_SEARCH, roleMap), true)
 assert.equal(hasPermission(user, PERMISSIONS.NEWS_READ, roleMap), true)
 assert.equal(hasPermission(user, PERMISSIONS.CALENDAR_IMPORT, roleMap), true)
 assert.equal(hasPermission(user, PERMISSIONS.NEWS_DELETE, roleMap), false)
+assert.equal(hasPermission(null, PERMISSIONS.CALENDAR_SEARCH, roleMap), true)
+assert.equal(hasPermission(null, PERMISSIONS.CALENDAR_IMPORT, roleMap), false)
+assert.equal(hasPermission(null, PERMISSIONS.CALENDAR_EXPORT, roleMap), false)
+assert.equal(hasAnyPermission(user, [PERMISSIONS.USERS_DELETE, PERMISSIONS.NEWS_READ], roleMap), true)
+assert.equal(hasAllPermissions(user, [PERMISSIONS.CALENDAR_SEARCH, PERMISSIONS.CALENDAR_IMPORT], roleMap), true)
+assert.equal(hasAllPermissions(user, [PERMISSIONS.CALENDAR_SEARCH, PERMISSIONS.USERS_DELETE], roleMap), false)
 assert.equal(getEffectivePermissions(root, roleMap).includes(PERMISSIONS.ROLES_CREATE), true)
 assert.equal(canAssignSystemRole(root, SYSTEM_ROLES.ADMIN), true)
 assert.equal(canAssignSystemRole(admin, SYSTEM_ROLES.ROOT_ADMIN), false)
@@ -47,7 +55,10 @@ assert.equal(canManageRole(root, roleMap.CONTENT_MANAGER, 'update', roleMap), tr
 assert.equal(validateCustomRole({ id: 'ROOT_ADMIN', type: 'CUSTOM', status: 'active', permissions: [] }).length > 0, true)
 assert.equal(validateCustomRole({ id: 'BAD_ROLE', type: 'CUSTOM', status: 'active', permissions: ['unknown.permission'] }).length > 0, true)
 assert.equal(validateCustomRole({ id: 'ROLE_MANAGER', type: 'CUSTOM', status: 'active', permissions: [PERMISSIONS.ROLES_ASSIGN] }).length > 0, true)
-assert.equal(getEffectivePermissions(user, { ...roleMap, BAD_ROLE: { type: 'CUSTOM', status: 'active', permissions: ['unknown.permission'] } }).includes('unknown.permission'), false)
+assert.equal(getEffectivePermissions(
+  { ...user, customRoles: [...user.customRoles, 'BAD_ROLE'] },
+  { ...roleMap, BAD_ROLE: { type: 'CUSTOM', status: 'active', permissions: ['unknown.permission'] } },
+).includes('unknown.permission'), false)
 assert.equal(generateRoleId('Quản lý nội dung'), 'QUAN_LY_NOI_DUNG')
 assert.equal(generateRoleId('Biên tập viên tin tức'), 'BIEN_TAP_VIEN_TIN_TUC')
 assert.equal(generateRoleId('Đội ngũ quản lý'), 'DOI_NGU_QUAN_LY')

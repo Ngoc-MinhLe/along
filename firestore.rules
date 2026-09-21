@@ -2,18 +2,30 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Module 1 legacy access remains unchanged in Phase 4A.
+    // Calendar lookup remains public. Import writes use the trusted,
+    // materialized effective permission document.
     match /calendarImports/{document=**} {
       allow read: if true;
-      allow write: if true;
+      allow write: if hasPermission('calendar.import');
     }
 
     function signedIn() {
       return request.auth != null;
     }
 
-    function isRoot() {
-      return signedIn() && request.auth.token.systemRole == 'ROOT_ADMIN';
+    function hasPermission(permission) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/userAuthorizations/$(request.auth.uid))
+        && get(/databases/$(database)/documents/userAuthorizations/$(request.auth.uid)).data.uid == request.auth.uid
+        && get(/databases/$(database)/documents/userAuthorizations/$(request.auth.uid)).data.permissions is list
+        && permission in get(/databases/$(database)/documents/userAuthorizations/$(request.auth.uid)).data.permissions;
+    }
+
+    function ownsAssignedRole(roleId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.customRoles is list
+        && roleId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.customRoles;
     }
 
     function isSystemRoleId(roleId) {
@@ -27,29 +39,15 @@ service cloud.firestore {
     // This is the Rules-side allowlist. It intentionally excludes role-management
     // and user-delete capabilities from Custom Roles.
     function isCustomPermission(permission) {
-      return permission == 'users.read'
-        || permission == 'users.create'
-        || permission == 'users.update'
-        || permission == 'roles.read'
-        || permission == 'calendar.search'
-        || permission == 'calendar.export'
-        || permission == 'calendar.import'
-        || permission == 'news.read'
-        || permission == 'news.create'
-        || permission == 'news.update'
-        || permission == 'news.delete'
-        || permission == 'news.publish'
-        || permission == 'quiz.question.read'
-        || permission == 'quiz.question.create'
-        || permission == 'quiz.question.update'
-        || permission == 'quiz.question.delete'
-        || permission == 'quiz.exam.create'
-        || permission == 'quiz.exam.update'
-        || permission == 'quiz.exam.publish'
-        || permission == 'quiz.exam.delete'
-        || permission == 'approval.create'
-        || permission == 'approval.review'
-        || permission == 'audit.read';
+      return permission in [
+        'users.read', 'users.create', 'users.update', 'roles.read',
+        'calendar.search', 'calendar.export', 'calendar.import',
+        'news.read', 'news.create', 'news.update', 'news.delete', 'news.publish',
+        'quiz.question.read', 'quiz.question.create', 'quiz.question.update',
+        'quiz.question.delete', 'quiz.exam.create', 'quiz.exam.update',
+        'quiz.exam.publish', 'quiz.exam.delete', 'approval.create',
+        'approval.review', 'audit.read'
+      ];
     }
 
     // Firestore Rules have no JavaScript import/loop over the code catalog.
@@ -106,33 +104,8 @@ service cloud.firestore {
         && validCustomPermissionList(data.permissions);
     }
 
-    function validCustomRoleIds(roleIds) {
-      return roleIds is list
-        && roleIds.size() <= 20
-        && (roleIds.size() < 1 || roleIds[0] is string)
-        && (roleIds.size() < 2 || roleIds[1] is string)
-        && (roleIds.size() < 3 || roleIds[2] is string)
-        && (roleIds.size() < 4 || roleIds[3] is string)
-        && (roleIds.size() < 5 || roleIds[4] is string)
-        && (roleIds.size() < 6 || roleIds[5] is string)
-        && (roleIds.size() < 7 || roleIds[6] is string)
-        && (roleIds.size() < 8 || roleIds[7] is string)
-        && (roleIds.size() < 9 || roleIds[8] is string)
-        && (roleIds.size() < 10 || roleIds[9] is string)
-        && (roleIds.size() < 11 || roleIds[10] is string)
-        && (roleIds.size() < 12 || roleIds[11] is string)
-        && (roleIds.size() < 13 || roleIds[12] is string)
-        && (roleIds.size() < 14 || roleIds[13] is string)
-        && (roleIds.size() < 15 || roleIds[14] is string)
-        && (roleIds.size() < 16 || roleIds[15] is string)
-        && (roleIds.size() < 17 || roleIds[16] is string)
-        && (roleIds.size() < 18 || roleIds[17] is string)
-        && (roleIds.size() < 19 || roleIds[18] is string)
-        && (roleIds.size() < 20 || roleIds[19] is string);
-    }
-
     match /users/{userId} {
-      allow read: if isRoot() || (signedIn() && request.auth.uid == userId);
+      allow read: if hasPermission('users.read') || (signedIn() && request.auth.uid == userId);
 
       allow create: if signedIn()
         && request.auth.uid == userId
@@ -149,50 +122,47 @@ service cloud.firestore {
         ]);
 
       // Owner profile metadata update. customRoles/systemRole/status are excluded.
-      allow update: if (
-          signedIn()
-          && request.auth.uid == userId
-          && request.resource.data.uid == resource.data.uid
-          && request.resource.data.systemRole == resource.data.systemRole
-          && request.resource.data.status == resource.data.status
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'email', 'displayName', 'photoURL', 'updatedAt', 'lastLoginAt'
-          ])
-        ) || (
-          isRoot()
-          && request.auth.uid != userId
-          && request.resource.data.uid == resource.data.uid
-          && request.resource.data.systemRole == resource.data.systemRole
-          && request.resource.data.status == resource.data.status
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'customRoles', 'updatedAt'
-          ])
-          && validCustomRoleIds(request.resource.data.customRoles)
-        );
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.systemRole == resource.data.systemRole
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'email', 'displayName', 'photoURL', 'updatedAt', 'lastLoginAt'
+        ]);
 
       allow delete: if false;
     }
 
     match /roles/{roleId} {
-      allow read: if isRoot();
+      allow get: if hasPermission('roles.read') || ownsAssignedRole(roleId);
+      allow list: if hasPermission('roles.read');
 
-      allow create: if isRoot()
+      // Creating a new role cannot invalidate an existing authorization.
+      allow create: if hasPermission('roles.create')
         && validCustomRole(request.resource.data, roleId)
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp;
 
-      allow update: if isRoot()
+      // Browser updates are metadata-only. Permission/status changes must use
+      // trusted tooling so affected authorizations are rebuilt.
+      allow update: if hasPermission('roles.update')
         && resource.data.type == 'CUSTOM'
         && validCustomRole(request.resource.data, roleId)
         && request.resource.data.createdBy == resource.data.createdBy
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name', 'description', 'status', 'permissions', 'updatedAt'
+          'name', 'description', 'updatedAt'
         ]);
 
-      allow delete: if isRoot()
-        && resource.data.type == 'CUSTOM';
+      allow delete: if false;
+    }
+
+    match /userAuthorizations/{userId} {
+      allow get: if signedIn() && request.auth.uid == userId;
+      allow list: if false;
+      allow create, update, delete: if false;
     }
   }
 }

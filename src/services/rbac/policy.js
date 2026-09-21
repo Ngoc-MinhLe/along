@@ -20,6 +20,10 @@ export const ROLE_PERMISSIONS = Object.freeze({
   [SYSTEM_ROLES.ROOT_ADMIN]: PERMISSION_VALUES,
 })
 
+// Calendar lookup is intentionally public. Other capabilities always require
+// an authenticated actor whose System Role/Custom Roles grant the permission.
+export const PUBLIC_PERMISSIONS = Object.freeze([PERMISSIONS.CALENDAR_SEARCH])
+
 export const CUSTOM_ROLE_SCHEMA = Object.freeze({ type: 'CUSTOM', statuses: ['active', 'disabled'] })
 export const CUSTOM_ROLE_FORBIDDEN_PERMISSIONS = Object.freeze([
   PERMISSIONS.USERS_DELETE,
@@ -48,6 +52,7 @@ export function getEffectiveRoles(user, roleMap = {}) {
 }
 
 export function getEffectivePermissions(user, roleMap = {}) {
+  if (!user) return [...PUBLIC_PERMISSIONS]
   const { systemRole, customRoles } = getEffectiveRoles(user, roleMap)
   const permissions = new Set(ROLE_PERMISSIONS[systemRole] || ROLE_PERMISSIONS[SYSTEM_ROLES.USER])
   customRoles.forEach((role) => role.permissions
@@ -58,6 +63,16 @@ export function getEffectivePermissions(user, roleMap = {}) {
 
 export function hasPermission(user, permission, roleMap = {}) {
   return getEffectivePermissions(user, roleMap).includes(permission)
+}
+
+export function hasAnyPermission(user, permissions, roleMap = {}) {
+  const effectivePermissions = new Set(getEffectivePermissions(user, roleMap))
+  return permissions.some((permission) => effectivePermissions.has(permission))
+}
+
+export function hasAllPermissions(user, permissions, roleMap = {}) {
+  const effectivePermissions = new Set(getEffectivePermissions(user, roleMap))
+  return permissions.every((permission) => effectivePermissions.has(permission))
 }
 
 export function canManageRole(actor, targetRole, action = 'update', roleMap = {}) {
@@ -95,11 +110,12 @@ export function validateCustomRole(role) {
   return errors
 }
 
-export function canManageUserRole(actor, targetUser, targetRole, roleMap = {}) {
+export function canManageUserRole(actor, targetUser, targetRole, roleMap = {}, action = 'assign') {
   if (targetUser?.claims?.systemRole === SYSTEM_ROLES.ROOT_ADMIN || targetUser?.systemRole === SYSTEM_ROLES.ROOT_ADMIN) return false
   if (isSystemRole(targetRole)) return canAssignSystemRole(actor, targetRole, getSystemRole(targetUser))
   const role = roleMap[targetRole]
-  return Boolean(role && role.status === 'active' && canManageRole(actor, role, 'assign', roleMap))
+  const roleCanBeChanged = action === 'revoke' || role?.status === 'active'
+  return Boolean(role && roleCanBeChanged && canManageRole(actor, role, action, roleMap))
 }
 
 export { ROLE_HIERARCHY }

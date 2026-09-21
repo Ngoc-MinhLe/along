@@ -1,8 +1,8 @@
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
-import { Timestamp } from 'firebase-admin/firestore'
 import { adminAuth, authorizeRootOperator, findTarget, readTargetState } from './lib/system-role-admin.mjs'
 import { buildSystemRolePlan, executeSystemRolePlan } from './lib/system-role-core.mjs'
+import { updateUserSystemRoleAndAuthorization } from './lib/authorization-admin.mjs'
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
@@ -77,8 +77,8 @@ async function main() {
       await adminAuth.setCustomUserClaims(target.authUser.uid, claims)
     },
     async updateProfile(systemRole) {
-      info('Updating Firestore...')
-      await target.profileRef.update({ systemRole, updatedAt: Timestamp.now() })
+      info('Updating Firestore profile and materialized authorization...')
+      await updateUserSystemRoleAndAuthorization(target.authUser.uid, systemRole)
     },
     async readState() {
       info('Verifying consistency...')

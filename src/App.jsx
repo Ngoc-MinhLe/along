@@ -10,6 +10,8 @@ import AdminPage from './pages/AdminPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminRolesPage from './pages/AdminRolesPage'
 import AdminPermissionsPage from './pages/AdminPermissionsPage'
+import PermissionGate from './components/PermissionGate'
+import { PERMISSIONS } from './services/rbac/permissions'
 
 export default function App() {
   return (
@@ -24,9 +26,9 @@ export default function App() {
         <Route path="/trac-nghiem" element={<PlaceholderPage title="Học trắc nghiệm" />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<AdminPage />} />
-          <Route path="users" element={<AdminUsersPage />} />
-          <Route path="roles" element={<AdminRolesPage />} />
-          <Route path="permissions" element={<AdminPermissionsPage />} />
+          <Route path="users" element={<PermissionGate permission={PERMISSIONS.USERS_READ}><AdminUsersPage /></PermissionGate>} />
+          <Route path="roles" element={<PermissionGate permission={PERMISSIONS.ROLES_READ}><AdminRolesPage /></PermissionGate>} />
+          <Route path="permissions" element={<PermissionGate permission={PERMISSIONS.ROLES_READ}><AdminPermissionsPage /></PermissionGate>} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
