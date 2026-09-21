@@ -50,6 +50,13 @@ export function logout() {
   return signOut(requireAuth())
 }
 
+export async function getCurrentUserClaims(forceRefresh = false) {
+  const currentUser = requireAuth().currentUser
+  if (!currentUser) return null
+  const tokenResult = await currentUser.getIdTokenResult(forceRefresh)
+  return tokenResult.claims
+}
+
 export async function ensureUserProfile(firebaseUser) {
   const database = requireDb()
   const profileRef = doc(database, 'users', firebaseUser.uid)
