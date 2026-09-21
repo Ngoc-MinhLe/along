@@ -4,12 +4,13 @@ import { PERMISSION_VALUES } from '../services/rbac/permissions'
 import { CUSTOM_ROLE_FORBIDDEN_PERMISSIONS, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { SYSTEM_ROLES } from '../services/rbac/roles'
 import { createCustomRole, listCustomRoles, listUsers, removeCustomRole, setCustomRoleStatus, updateCustomRole } from '../services/rbac/firestore'
+import { generateRoleId } from '../services/rbac/roleId'
 
 const permissionGroups = [
   ['Users', 'users.'], ['Roles', 'roles.'], ['Calendar', 'calendar.'], ['News', 'news.'], ['Quiz', 'quiz.'], ['Approval', 'approval.'], ['Audit', 'audit.'],
 ]
 
-const emptyForm = { id: '', name: '', description: '', permissions: [] }
+const emptyForm = { name: '', description: '', permissions: [] }
 
 function formatDate(value) {
   if (!value) return '—'
@@ -55,8 +56,10 @@ export default function AdminRolesPage() {
     event.preventDefault()
     setSaving(true); setError(''); setMessage('')
     try {
-      if (editingId) await updateCustomRole(editingId, form)
-      else await createCustomRole(form, user.uid)
+      let savedRole
+      if (editingId) savedRole = await updateCustomRole(editingId, form)
+      else savedRole = await createCustomRole(form, user.uid)
+      if (!editingId && savedRole) setMessage(`Created Custom Role ${savedRole.id}.`)
       setShowForm(false); setMessage(editingId ? 'Đã cập nhật Custom Role.' : 'Đã tạo Custom Role.'); await loadData()
     } catch (saveError) { setError(saveError.message) }
     finally { setSaving(false) }
@@ -92,6 +95,19 @@ export default function AdminRolesPage() {
   )
 }
 
-function RoleForm({ form, editing, saving, onChange, onTogglePermission, onSubmit, onCancel }) {
+function LegacyRoleForm({ form, editing, saving, onChange, onTogglePermission, onSubmit, onCancel }) {
   return <form className="admin-role-form" onSubmit={onSubmit}><div className="admin-form-grid"><label>Role ID<input value={form.id} disabled={editing} onChange={(event) => onChange({ ...form, id: event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })} required /></label><label>Tên role<input value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} required /></label></div><label>Mô tả<textarea value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} rows="2" /></label><fieldset><legend>Permissions</legend><div className="permission-groups">{permissionGroups.map(([group, prefix]) => <div key={group}><strong>{group}</strong>{PERMISSION_VALUES.filter((permission) => permission.startsWith(prefix)).map((permission) => { const protectedPermission = CUSTOM_ROLE_FORBIDDEN_PERMISSIONS.includes(permission); return <label key={permission} className={protectedPermission ? 'permission-disabled' : ''}><input type="checkbox" checked={form.permissions.includes(permission)} disabled={protectedPermission} onChange={() => onTogglePermission(permission)} />{permission}{protectedPermission && <small>policy protected</small>}</label> })}</div>)}</div></fieldset><div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo role'}</button><button className="admin-secondary-button" type="button" onClick={onCancel} disabled={saving}>Hủy</button></div></form>
+}
+
+function RoleForm({ form, editing, saving, onChange, onTogglePermission, onSubmit, onCancel }) {
+  const generatedId = generateRoleId(form.name)
+  return <form className="admin-role-form" onSubmit={onSubmit}>
+    <div className="admin-form-grid">
+      <label>Tên role<input value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} required /></label>
+      <div className="generated-role-id"><span>ID kỹ thuật tự sinh</span><code>{editing ? form.id || generatedId : generatedId}</code>{editing && <small>ID không thể thay đổi khi chỉnh sửa.</small>}</div>
+    </div>
+    <label>Mô tả<textarea value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} rows="2" /></label>
+    <fieldset><legend>Permissions</legend><div className="permission-groups">{permissionGroups.map(([group, prefix]) => <div key={group}><strong>{group}</strong>{PERMISSION_VALUES.filter((permission) => permission.startsWith(prefix)).map((permission) => { const protectedPermission = CUSTOM_ROLE_FORBIDDEN_PERMISSIONS.includes(permission); return <label key={permission} className={protectedPermission ? 'permission-disabled' : ''}><input type="checkbox" checked={form.permissions.includes(permission)} disabled={protectedPermission} onChange={() => onTogglePermission(permission)} />{permission}{protectedPermission && <small>policy protected</small>}</label> })}</div>)}</div></fieldset>
+    <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo role'}</button><button className="admin-secondary-button" type="button" onClick={onCancel} disabled={saving}>Hủy</button></div>
+  </form>
 }

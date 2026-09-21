@@ -8,6 +8,7 @@ import {
 } from '../src/services/rbac/policy.js'
 import { PERMISSIONS } from '../src/services/rbac/permissions.js'
 import { SYSTEM_ROLES } from '../src/services/rbac/roles.js'
+import { generateRoleId, roleIdCandidate } from '../src/services/rbac/roleId.js'
 
 const roleMap = {
   CONTENT_MANAGER: {
@@ -40,5 +41,9 @@ assert.equal(validateCustomRole({ id: 'ROOT_ADMIN', type: 'CUSTOM', status: 'act
 assert.equal(validateCustomRole({ id: 'BAD_ROLE', type: 'CUSTOM', status: 'active', permissions: ['unknown.permission'] }).length > 0, true)
 assert.equal(validateCustomRole({ id: 'ROLE_MANAGER', type: 'CUSTOM', status: 'active', permissions: [PERMISSIONS.ROLES_ASSIGN] }).length > 0, true)
 assert.equal(getEffectivePermissions(user, { ...roleMap, BAD_ROLE: { type: 'CUSTOM', status: 'active', permissions: ['unknown.permission'] } }).includes('unknown.permission'), false)
+assert.equal(generateRoleId('Quản lý nội dung'), 'CONTENT_MANAGER')
+assert.equal(generateRoleId('Biên tập viên tin tức'), 'BIEN_TAP_VIEN_TIN_TUC')
+assert.equal(generateRoleId('!!!'), 'CUSTOM_ROLE')
+assert.match(roleIdCandidate('CONTENT_MANAGER', 2), /^[A-Z][A-Z0-9_]{2,63}$/)
 
 console.log('RBAC self-test PASS: system roles, custom role union, disabled role exclusion, hierarchy and validation.')

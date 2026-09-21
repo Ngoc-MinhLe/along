@@ -1,18 +1,19 @@
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
   getDocs,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
-  setDoc,
   updateDoc,
-  arrayRemove,
-  arrayUnion,
 } from 'firebase/firestore'
 import { db } from '../../firebase/client'
 import { validateCustomRole } from './policy'
+import { generateRoleId, roleIdCandidate } from './roleId'
 
 function requireDb() {
   if (!db) throw new Error('Firestore chưa được cấu hình.')
@@ -32,19 +33,33 @@ export async function listUsers() {
 }
 
 export async function createCustomRole(role, actorUid) {
-  const errors = validateCustomRole(role)
+  const baseId = generateRoleId(role.name)
+  const errors = validateCustomRole({ ...role, id: baseId, type: 'CUSTOM', status: 'active' })
   if (!role.name?.trim()) errors.push('Tên role là bắt buộc.')
   if (errors.length) throw new Error(errors.join(' '))
-  await setDoc(doc(requireDb(), 'roles', role.id), {
-    id: role.id,
-    name: role.name.trim(),
-    description: role.description?.trim() || '',
-    type: 'CUSTOM',
-    status: 'active',
-    permissions: role.permissions,
-    createdBy: actorUid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+
+  const database = requireDb()
+  return runTransaction(database, async (transaction) => {
+    for (let index = 1; index <= 1000; index += 1) {
+      const id = roleIdCandidate(baseId, index)
+      const roleRef = doc(database, 'roles', id)
+      const snapshot = await transaction.get(roleRef)
+      if (!snapshot.exists()) {
+        transaction.set(roleRef, {
+          id,
+          name: role.name.trim(),
+          description: role.description?.trim() || '',
+          type: 'CUSTOM',
+          status: 'active',
+          permissions: role.permissions,
+          createdBy: actorUid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+        return { id }
+      }
+    }
+    throw new Error('Không thể tự sinh Role ID vì đã có quá nhiều ID trùng.')
   })
 }
 
@@ -59,6 +74,7 @@ export async function updateCustomRole(roleId, changes) {
     permissions: changes.permissions,
     updatedAt: serverTimestamp(),
   })
+  return { id: roleId }
 }
 
 export function setCustomRoleStatus(roleId, status) {
