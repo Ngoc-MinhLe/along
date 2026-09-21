@@ -7,7 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "bootstrap:root": "node scripts/bootstrap-root.mjs"
+    "bootstrap:root": "node scripts/bootstrap-root.mjs",
+    "test:rbac": "node scripts/rbac-self-test.mjs",
+    "rbac:create-role": "node scripts/rbac-admin.mjs create-role",
+    "rbac:update-role": "node scripts/rbac-admin.mjs update-role",
+    "rbac:disable-role": "node scripts/rbac-admin.mjs disable-role",
+    "rbac:delete-role": "node scripts/rbac-admin.mjs delete-role",
+    "rbac:assign-role": "node scripts/rbac-admin.mjs assign-role",
+    "rbac:revoke-role": "node scripts/rbac-admin.mjs revoke-role"
   },
   "dependencies": {
     "firebase": "^12.4.0",
