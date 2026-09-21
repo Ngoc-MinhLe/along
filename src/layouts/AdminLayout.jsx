@@ -1,23 +1,12 @@
-import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Link, Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import { hasPermission } from '../services/rbac/policy'
-import { PERMISSIONS } from '../services/rbac/permissions'
-
-const routePermissions = {
-  '/admin/users': PERMISSIONS.USERS_READ,
-  '/admin/roles': PERMISSIONS.ROLES_READ,
-  '/admin/permissions': PERMISSIONS.ROLES_READ,
-}
 
 export default function AdminLayout() {
-  const location = useLocation()
   const { user, profile, claims, loading } = useAuth()
-  const actor = { ...profile, systemRole: claims?.systemRole || profile?.systemRole, claims }
   const isRoot = claims?.systemRole === 'ROOT_ADMIN'
-  const allowed = isRoot || hasPermission(actor, routePermissions[location.pathname] || PERMISSIONS.ROLES_READ)
 
   if (loading) return <div className="admin-loading">Đang kiểm tra quyền truy cập…</div>
-  if (!user || !allowed) return <Navigate to="/" replace />
+  if (!user || !isRoot) return <Navigate to="/" replace />
 
   return (
     <div className="admin-area">

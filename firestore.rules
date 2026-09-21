@@ -2,7 +2,7 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Kept exactly as the current Console rules for Module 1 import/test.
+    // Module 1 legacy access remains unchanged in Phase 4A.
     match /calendarImports/{document=**} {
       allow read: if true;
       allow write: if true;
@@ -12,54 +12,187 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    match /users/{userId} {
-      // Profiles are private and can only be read by their owner.
-      allow read: if signedIn() && request.auth.uid == userId;
+    function isRoot() {
+      return signedIn() && request.auth.token.systemRole == 'ROOT_ADMIN';
+    }
 
-      // A client-created profile must be its own profile and a normal USER.
+    function isSystemRoleId(roleId) {
+      return roleId == 'ROOT_ADMIN'
+        || roleId == 'SUPER_ADMIN'
+        || roleId == 'ADMIN'
+        || roleId == 'EDITOR'
+        || roleId == 'USER';
+    }
+
+    // This is the Rules-side allowlist. It intentionally excludes role-management
+    // and user-delete capabilities from Custom Roles.
+    function isCustomPermission(permission) {
+      return permission == 'users.read'
+        || permission == 'users.create'
+        || permission == 'users.update'
+        || permission == 'roles.read'
+        || permission == 'calendar.search'
+        || permission == 'calendar.export'
+        || permission == 'calendar.import'
+        || permission == 'news.read'
+        || permission == 'news.create'
+        || permission == 'news.update'
+        || permission == 'news.delete'
+        || permission == 'news.publish'
+        || permission == 'quiz.question.read'
+        || permission == 'quiz.question.create'
+        || permission == 'quiz.question.update'
+        || permission == 'quiz.question.delete'
+        || permission == 'quiz.exam.create'
+        || permission == 'quiz.exam.update'
+        || permission == 'quiz.exam.publish'
+        || permission == 'quiz.exam.delete'
+        || permission == 'approval.create'
+        || permission == 'approval.review'
+        || permission == 'audit.read';
+    }
+
+    // Firestore Rules have no JavaScript import/loop over the code catalog.
+    // The bounded checks below reject unknown permissions in a role document.
+    function validCustomPermissionList(permissions) {
+      return permissions is list
+        && permissions.size() <= 32
+        && (permissions.size() < 1 || isCustomPermission(permissions[0]))
+        && (permissions.size() < 2 || isCustomPermission(permissions[1]))
+        && (permissions.size() < 3 || isCustomPermission(permissions[2]))
+        && (permissions.size() < 4 || isCustomPermission(permissions[3]))
+        && (permissions.size() < 5 || isCustomPermission(permissions[4]))
+        && (permissions.size() < 6 || isCustomPermission(permissions[5]))
+        && (permissions.size() < 7 || isCustomPermission(permissions[6]))
+        && (permissions.size() < 8 || isCustomPermission(permissions[7]))
+        && (permissions.size() < 9 || isCustomPermission(permissions[8]))
+        && (permissions.size() < 10 || isCustomPermission(permissions[9]))
+        && (permissions.size() < 11 || isCustomPermission(permissions[10]))
+        && (permissions.size() < 12 || isCustomPermission(permissions[11]))
+        && (permissions.size() < 13 || isCustomPermission(permissions[12]))
+        && (permissions.size() < 14 || isCustomPermission(permissions[13]))
+        && (permissions.size() < 15 || isCustomPermission(permissions[14]))
+        && (permissions.size() < 16 || isCustomPermission(permissions[15]))
+        && (permissions.size() < 17 || isCustomPermission(permissions[16]))
+        && (permissions.size() < 18 || isCustomPermission(permissions[17]))
+        && (permissions.size() < 19 || isCustomPermission(permissions[18]))
+        && (permissions.size() < 20 || isCustomPermission(permissions[19]))
+        && (permissions.size() < 21 || isCustomPermission(permissions[20]))
+        && (permissions.size() < 22 || isCustomPermission(permissions[21]))
+        && (permissions.size() < 23 || isCustomPermission(permissions[22]))
+        && (permissions.size() < 24 || isCustomPermission(permissions[23]))
+        && (permissions.size() < 25 || isCustomPermission(permissions[24]))
+        && (permissions.size() < 26 || isCustomPermission(permissions[25]))
+        && (permissions.size() < 27 || isCustomPermission(permissions[26]))
+        && (permissions.size() < 28 || isCustomPermission(permissions[27]))
+        && (permissions.size() < 29 || isCustomPermission(permissions[28]))
+        && (permissions.size() < 30 || isCustomPermission(permissions[29]))
+        && (permissions.size() < 31 || isCustomPermission(permissions[30]))
+        && (permissions.size() < 32 || isCustomPermission(permissions[31]));
+    }
+
+    function validCustomRole(data, roleId) {
+      return data.keys().hasOnly([
+          'id', 'name', 'description', 'type', 'status', 'permissions',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.id == roleId
+        && !isSystemRoleId(roleId)
+        && data.type == 'CUSTOM'
+        && (data.status == 'active' || data.status == 'disabled')
+        && data.name is string
+        && data.name.size() > 0
+        && data.description is string
+        && validCustomPermissionList(data.permissions);
+    }
+
+    function validCustomRoleIds(roleIds) {
+      return roleIds is list
+        && roleIds.size() <= 20
+        && (roleIds.size() < 1 || roleIds[0] is string)
+        && (roleIds.size() < 2 || roleIds[1] is string)
+        && (roleIds.size() < 3 || roleIds[2] is string)
+        && (roleIds.size() < 4 || roleIds[3] is string)
+        && (roleIds.size() < 5 || roleIds[4] is string)
+        && (roleIds.size() < 6 || roleIds[5] is string)
+        && (roleIds.size() < 7 || roleIds[6] is string)
+        && (roleIds.size() < 8 || roleIds[7] is string)
+        && (roleIds.size() < 9 || roleIds[8] is string)
+        && (roleIds.size() < 10 || roleIds[9] is string)
+        && (roleIds.size() < 11 || roleIds[10] is string)
+        && (roleIds.size() < 12 || roleIds[11] is string)
+        && (roleIds.size() < 13 || roleIds[12] is string)
+        && (roleIds.size() < 14 || roleIds[13] is string)
+        && (roleIds.size() < 15 || roleIds[14] is string)
+        && (roleIds.size() < 16 || roleIds[15] is string)
+        && (roleIds.size() < 17 || roleIds[16] is string)
+        && (roleIds.size() < 18 || roleIds[17] is string)
+        && (roleIds.size() < 19 || roleIds[18] is string)
+        && (roleIds.size() < 20 || roleIds[19] is string);
+    }
+
+    match /users/{userId} {
+      allow read: if isRoot() || (signedIn() && request.auth.uid == userId);
+
       allow create: if signedIn()
         && request.auth.uid == userId
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.systemRole == 'USER'
         && request.resource.data.status == 'active'
         && request.resource.data.keys().hasAll([
-          'uid',
-          'email',
-          'displayName',
-          'photoURL',
-          'systemRole',
-          'status',
-          'createdAt',
-          'updatedAt',
-          'lastLoginAt'
+          'uid', 'email', 'displayName', 'photoURL', 'systemRole', 'status',
+          'createdAt', 'updatedAt', 'lastLoginAt'
         ])
         && request.resource.data.keys().hasOnly([
-          'uid',
-          'email',
-          'displayName',
-          'photoURL',
-          'systemRole',
-          'status',
-          'createdAt',
-          'updatedAt',
-          'lastLoginAt'
+          'uid', 'email', 'displayName', 'photoURL', 'systemRole', 'status',
+          'createdAt', 'updatedAt', 'lastLoginAt'
         ]);
 
-      // Clients can update only profile metadata; all permission fields stay unchanged.
-      allow update: if signedIn()
-        && request.auth.uid == userId
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.systemRole == resource.data.systemRole
-        && request.resource.data.status == resource.data.status
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'email',
-          'displayName',
-          'photoURL',
-          'updatedAt',
-          'lastLoginAt'
-        ]);
+      // Owner profile metadata update. customRoles/systemRole/status are excluded.
+      allow update: if (
+          signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.systemRole == resource.data.systemRole
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'email', 'displayName', 'photoURL', 'updatedAt', 'lastLoginAt'
+          ])
+        ) || (
+          isRoot()
+          && request.auth.uid != userId
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.systemRole == resource.data.systemRole
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'customRoles', 'updatedAt'
+          ])
+          && validCustomRoleIds(request.resource.data.customRoles)
+        );
 
       allow delete: if false;
+    }
+
+    match /roles/{roleId} {
+      allow read: if isRoot();
+
+      allow create: if isRoot()
+        && validCustomRole(request.resource.data, roleId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+
+      allow update: if isRoot()
+        && resource.data.type == 'CUSTOM'
+        && validCustomRole(request.resource.data, roleId)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'description', 'status', 'permissions', 'updatedAt'
+        ]);
+
+      allow delete: if isRoot()
+        && resource.data.type == 'CUSTOM';
     }
   }
 }

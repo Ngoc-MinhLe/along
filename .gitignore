@@ -13,3 +13,5 @@ firebase-adminsdk*.json
 service-account*.json
 *-service-account.json
 admin-credentials*.json
+firebase-debug.log
+firestore-debug.log
