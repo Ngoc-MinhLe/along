@@ -6,6 +6,9 @@ const PROJECT_ID = 'along-rules-audit'
 const ROOT_UID = 'root-audit-uid'
 const USER_UID = 'user-audit-uid'
 const OTHER_UID = 'other-audit-uid'
+const EDITOR_UID = 'editor-audit-uid'
+const ADMIN_UID = 'admin-audit-uid'
+const SUPER_ADMIN_UID = 'super-admin-audit-uid'
 const [host = '127.0.0.1', port = '8080'] = (process.env.FIRESTORE_EMULATOR_HOST || '').split(':')
 
 const testEnv = await initializeTestEnvironment({
@@ -20,6 +23,9 @@ const testEnv = await initializeTestEnvironment({
 const rootDb = testEnv.authenticatedContext(ROOT_UID, { systemRole: 'ROOT_ADMIN' }).firestore()
 const userDb = testEnv.authenticatedContext(USER_UID, { systemRole: 'USER' }).firestore()
 const otherDb = testEnv.authenticatedContext(OTHER_UID, { systemRole: 'USER' }).firestore()
+const editorDb = testEnv.authenticatedContext(EDITOR_UID, { systemRole: 'EDITOR' }).firestore()
+const adminDb = testEnv.authenticatedContext(ADMIN_UID, { systemRole: 'ADMIN' }).firestore()
+const superAdminDb = testEnv.authenticatedContext(SUPER_ADMIN_UID, { systemRole: 'SUPER_ADMIN' }).firestore()
 const guestDb = testEnv.unauthenticatedContext().firestore()
 const now = Timestamp.now()
 const results = []
@@ -69,6 +75,9 @@ try {
     await setDoc(doc(db, 'users', ROOT_UID), userData(ROOT_UID, 'ROOT_ADMIN'))
     await setDoc(doc(db, 'users', USER_UID), userData(USER_UID))
     await setDoc(doc(db, 'users', OTHER_UID), userData(OTHER_UID))
+    await setDoc(doc(db, 'users', EDITOR_UID), userData(EDITOR_UID, 'EDITOR'))
+    await setDoc(doc(db, 'users', ADMIN_UID), userData(ADMIN_UID, 'ADMIN'))
+    await setDoc(doc(db, 'users', SUPER_ADMIN_UID), userData(SUPER_ADMIN_UID, 'SUPER_ADMIN'))
     await setDoc(doc(db, 'roles', 'EXISTING_ROLE'), roleData('EXISTING_ROLE'))
     await setDoc(doc(db, 'systemConfig', 'root'), { rootUid: ROOT_UID, updatedAt: now })
   })
@@ -98,6 +107,24 @@ try {
   await allow('ROOT disable Custom Role', updateDoc(doc(rootDb, 'roles', 'CONTENT_MANAGER'), { status: 'disabled', updatedAt: Timestamp.now() }))
   await allow('ROOT enable Custom Role', updateDoc(doc(rootDb, 'roles', 'CONTENT_MANAGER'), { status: 'active', updatedAt: Timestamp.now() }))
   await allow('ROOT xóa Custom Role', deleteDoc(doc(rootDb, 'roles', 'CONTENT_MANAGER')))
+
+  // Phase 4B keeps browser-side System Role mutation disabled until a trusted
+  // backend can synchronize both the profile and Firebase Custom Claims.
+  await deny('4B.1 USER cannot change own System Role', updateDoc(doc(userDb, 'users', USER_UID), { systemRole: 'EDITOR', updatedAt: Timestamp.now() }))
+  await deny('4B.2 USER cannot change another user System Role', updateDoc(doc(userDb, 'users', OTHER_UID), { systemRole: 'EDITOR', updatedAt: Timestamp.now() }))
+  await deny('4B.3 EDITOR cannot change System Role', updateDoc(doc(editorDb, 'users', OTHER_UID), { systemRole: 'ADMIN', updatedAt: Timestamp.now() }))
+  await deny('4B.4 ADMIN cannot change System Role', updateDoc(doc(adminDb, 'users', OTHER_UID), { systemRole: 'EDITOR', updatedAt: Timestamp.now() }))
+  await deny('4B.5 SUPER_ADMIN cannot change System Role', updateDoc(doc(superAdminDb, 'users', OTHER_UID), { systemRole: 'ADMIN', updatedAt: Timestamp.now() }))
+  await deny('4B.6 ROOT browser cannot assign EDITOR before claims sync backend', updateDoc(doc(rootDb, 'users', OTHER_UID), { systemRole: 'EDITOR', updatedAt: Timestamp.now() }))
+  await deny('4B.7 ROOT browser cannot assign ADMIN before claims sync backend', updateDoc(doc(rootDb, 'users', OTHER_UID), { systemRole: 'ADMIN', updatedAt: Timestamp.now() }))
+  await deny('4B.8 ROOT browser cannot assign SUPER_ADMIN before claims sync backend', updateDoc(doc(rootDb, 'users', OTHER_UID), { systemRole: 'SUPER_ADMIN', updatedAt: Timestamp.now() }))
+  await deny('4B.9 ROOT cannot assign ROOT_ADMIN', updateDoc(doc(rootDb, 'users', OTHER_UID), { systemRole: 'ROOT_ADMIN', updatedAt: Timestamp.now() }))
+  await deny('4B.10 ROOT document remains protected', updateDoc(doc(rootDb, 'users', ROOT_UID), { systemRole: 'ROOT_ADMIN', status: 'suspended', updatedAt: Timestamp.now() }))
+  await deny('4B.11 ROOT cannot demote ROOT', updateDoc(doc(rootDb, 'users', ROOT_UID), { systemRole: 'USER', updatedAt: Timestamp.now() }))
+  await deny('4B.12 Invalid System Role is denied', updateDoc(doc(rootDb, 'users', OTHER_UID), { systemRole: 'OWNER', updatedAt: Timestamp.now() }))
+  await deny('4B.13 System Role mutation cannot modify customRoles', updateDoc(doc(rootDb, 'users', OTHER_UID), { systemRole: 'EDITOR', customRoles: ['EXISTING_ROLE'], updatedAt: Timestamp.now() }))
+  await deny('4B.14 System Role mutation cannot modify status', updateDoc(doc(rootDb, 'users', OTHER_UID), { systemRole: 'EDITOR', status: 'suspended', updatedAt: Timestamp.now() }))
+  await deny('4B.15 System Role mutation cannot modify uid', updateDoc(doc(rootDb, 'users', OTHER_UID), { uid: 'tampered-uid', systemRole: 'EDITOR', updatedAt: Timestamp.now() }))
 
   results.forEach((result) => console.log(result))
   console.log(`Firestore Rules security audit PASS (${results.length} assertions).`)

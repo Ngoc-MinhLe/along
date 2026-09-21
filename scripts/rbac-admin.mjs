@@ -131,6 +131,7 @@ async function deleteRole(actor, roleMap) {
 async function assignRole(actor, actorRoleMap) {
   const targetUid = requiredOption('uid')
   const roleId = requiredOption('role')
+  if (isSystemRole(roleId)) throw new Error('System Role mutation is disabled in rbac:assign-role. Use rbac:set-system-role with verified ROOT authorization.')
   const targetAuth = await auth.getUser(targetUid)
   const targetSnapshot = await users.doc(targetUid).get()
   if (!targetSnapshot.exists) throw new Error('Target chưa có users/{uid}.')
@@ -154,6 +155,7 @@ async function assignRole(actor, actorRoleMap) {
 async function revokeRole(actor, actorRoleMap) {
   const targetUid = requiredOption('uid')
   const roleId = requiredOption('role')
+  if (isSystemRole(roleId)) throw new Error('System Role mutation is disabled in rbac:revoke-role. Use rbac:set-system-role with verified ROOT authorization.')
   const targetAuth = await auth.getUser(targetUid)
   const targetSnapshot = await users.doc(targetUid).get()
   if (!targetSnapshot.exists) throw new Error('Target chưa có users/{uid}.')

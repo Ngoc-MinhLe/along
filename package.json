@@ -15,7 +15,10 @@
     "rbac:disable-role": "node scripts/rbac-admin.mjs disable-role",
     "rbac:delete-role": "node scripts/rbac-admin.mjs delete-role",
     "rbac:assign-role": "node scripts/rbac-admin.mjs assign-role",
-    "rbac:revoke-role": "node scripts/rbac-admin.mjs revoke-role"
+    "rbac:revoke-role": "node scripts/rbac-admin.mjs revoke-role",
+    "rbac:set-system-role": "node scripts/set-system-role.mjs",
+    "rbac:get-system-role": "node scripts/get-system-role.mjs",
+    "test:system-role-tool": "node scripts/system-role-tool-test.mjs"
   },
   "dependencies": {
     "firebase": "^12.4.0",

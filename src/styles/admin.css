@@ -6,3 +6,10 @@
  .generated-role-id { display: grid; align-content: center; gap: 6px; padding: 9px 10px; border: 1px dashed #cadbd4; border-radius: 6px; color: #57746c; background: #eef7f3; font-size: 11px; }
  .generated-role-id code { color: #17665b; font-size: 12px; font-weight: 700; word-break: break-all; }
  .generated-role-id small { color: #829690; font-size: 10px; font-weight: 400; }
+.system-role-readonly { display: grid; gap: 8px; padding: 12px; border: 1px solid #cadbd4; border-radius: 8px; background: #f4f8f6; }
+.system-role-readonly > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.system-role-readonly strong { color: #17665b; font-size: 13px; }
+.system-role-readonly small { padding: 3px 6px; border-radius: 10px; color: #57746c; background: #dcece6; font-size: 9px; font-weight: 700; letter-spacing: .05em; }
+.system-role-readonly > span { margin: 0; color: #718680; font-size: 11px; }
+.system-role-locked { border-color: #e1c98e; background: #fff8e8; }
+.system-role-locked small { color: #87651f; background: #f7e7b9; }
