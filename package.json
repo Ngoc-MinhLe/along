@@ -23,6 +23,7 @@
     "check:functions": "npm --prefix functions run check",
     "test:functions": "npm --prefix functions test",
     "test:functions:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-functions-audit \"node functions/test/custom-role-emulator.test.js\"",
+    "test:frontend-rbac": "node scripts/frontend-rbac-functions-test.mjs",
     "test:authorization": "node scripts/authorization-self-test.mjs",
     "rbac:rebuild-authorization": "node scripts/rebuild-authorization.mjs",
     "rbac:rebuild-all-authorizations": "node scripts/rebuild-all-authorizations.mjs",

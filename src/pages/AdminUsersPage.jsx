@@ -4,7 +4,8 @@ import { usePermissions } from '../auth/PermissionContext'
 import { PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
 import { canManageUserRole, getEffectivePermissions, getSystemRole, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { ROLE_HIERARCHY, SYSTEM_ROLES } from '../services/rbac/roles'
-import { assignCustomRole, listCustomRoles, listUsers, revokeCustomRole } from '../services/rbac/firestore'
+import { listCustomRoles, listUsers } from '../services/rbac/firestore'
+import { assignCustomRole, revokeCustomRole } from '../services/rbac/functions'
 
 const ROOT_UID = 'xITEdVIGAzXgudknovO0FROvNop1'
 const PAGE_SIZE = 25
@@ -51,11 +52,8 @@ function permissionGroups(permissions) {
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth()
   const { actor, hasPermission } = usePermissions()
-  const hasTrustedRoleMutation = hasPermission(PERMISSIONS.ROLES_ASSIGN) || hasPermission(PERMISSIONS.ROLES_REVOKE)
-  // Assign/revoke must also rebuild userAuthorizations atomically via Admin SDK.
-  // Browser mutation is intentionally disabled even when the actor has permission.
-  const canAssign = false
-  const canRevoke = false
+  const canAssign = hasPermission(PERMISSIONS.ROLES_ASSIGN)
+  const canRevoke = hasPermission(PERMISSIONS.ROLES_REVOKE)
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [selectedId, setSelectedId] = useState('')
@@ -185,7 +183,7 @@ export default function AdminUsersPage() {
       </>}
     </div>
 
-    {selected && <UserDrawer user={selected} roleMap={roleMap} activeRoles={availableRoles} roleToAssign={roleToAssign} setRoleToAssign={setRoleToAssign} currentUser={currentUser} busy={busy} canAssign={canAssign} canRevoke={canRevoke} trustedRoleManagement={hasTrustedRoleMutation} onClose={() => setSelectedId('')} onAssign={() => { mutateCustomRole('assign', roleToAssign); setRoleToAssign('') }} onRevoke={(roleId) => setRevokeTarget({ user: selected, roleId })} />}
+    {selected && <UserDrawer user={selected} roleMap={roleMap} activeRoles={availableRoles} roleToAssign={roleToAssign} setRoleToAssign={setRoleToAssign} currentUser={currentUser} busy={busy} canAssign={canAssign} canRevoke={canRevoke} onClose={() => setSelectedId('')} onAssign={() => { mutateCustomRole('assign', roleToAssign); setRoleToAssign('') }} onRevoke={(roleId) => setRevokeTarget({ user: selected, roleId })} />}
     {revokeTarget && <RevokeModal target={revokeTarget} roleMap={roleMap} busy={busy} onCancel={() => setRevokeTarget(null)} onConfirm={confirmRevoke} />}
   </section>
 }
@@ -203,8 +201,9 @@ function UserRow({ user, roleMap, onSelect }) {
   </tr>
 }
 
-function UserDrawer({ user, roleMap, activeRoles, roleToAssign, setRoleToAssign, currentUser, busy, canAssign, canRevoke, trustedRoleManagement, onClose, onAssign, onRevoke }) {
+function UserDrawer({ user, roleMap, activeRoles, roleToAssign, setRoleToAssign, currentUser, busy, canAssign, canRevoke, onClose, onAssign, onRevoke }) {
   const systemRole = getSystemRole(user)
+  const trustedRoleManagement = false
   const rootTarget = isRootUser(user)
   const protectedTarget = isProtectedTarget(user, currentUser)
   const effectivePermissions = getEffectivePermissions(user, roleMap)

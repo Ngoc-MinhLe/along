@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../auth/AuthContext'
 import { usePermissions } from '../auth/PermissionContext'
 import { PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
 import { CUSTOM_ROLE_FORBIDDEN_PERMISSIONS, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { ROLE_HIERARCHY } from '../services/rbac/roles'
-import { createCustomRole, listCustomRoles, listUsers, removeCustomRole, setCustomRoleStatus, updateCustomRole } from '../services/rbac/firestore'
+import { listCustomRoles, listUsers } from '../services/rbac/firestore'
+import { createCustomRole, deleteCustomRole, disableCustomRole, enableCustomRole, updateCustomRole } from '../services/rbac/functions'
 import { generateRoleId } from '../services/rbac/roleId'
 
 const GROUP_LABELS = Object.freeze({
@@ -38,17 +38,12 @@ function formatDate(value) {
 }
 
 export default function AdminRolesPage() {
-  const { user } = useAuth()
   const { hasPermission } = usePermissions()
   const canReadUsers = hasPermission(PERMISSIONS.USERS_READ)
   const canCreate = hasPermission(PERMISSIONS.ROLES_CREATE)
-  const hasTrustedRoleMutation = hasPermission(PERMISSIONS.ROLES_UPDATE)
-    || hasPermission(PERMISSIONS.ROLES_DISABLE)
-    || hasPermission(PERMISSIONS.ROLES_DELETE)
-  // Permission/status/delete changes require propagation to affected users.
-  const canUpdate = false
-  const canDisable = false
-  const canDelete = false
+  const canUpdate = hasPermission(PERMISSIONS.ROLES_UPDATE)
+  const canDisable = hasPermission(PERMISSIONS.ROLES_DISABLE)
+  const canDelete = hasPermission(PERMISSIONS.ROLES_DELETE)
   const [roles, setRoles] = useState([])
   const [users, setUsers] = useState([])
   const [form, setForm] = useState(emptyForm)
@@ -121,13 +116,13 @@ export default function AdminRolesPage() {
     setMessage('')
     try {
       if (editingId) {
-        await updateCustomRole(editingId, form)
+        await updateCustomRole({ roleId: editingId, name: form.name, description: form.description, permissions: form.permissions })
         await loadData()
         setMessage(`Đã cập nhật quyền của ${editingId}.`)
       } else {
-        const created = await createCustomRole(form, user.uid)
+        const created = await createCustomRole({ name: form.name, description: form.description, permissions: form.permissions })
         await loadData()
-        setMessage(`Đã tạo Custom Role ${created.id}.`)
+        setMessage(`Đã tạo Custom Role ${created.roleId}.`)
       }
       setShowForm(false)
       setEditingId('')
@@ -148,7 +143,8 @@ export default function AdminRolesPage() {
     setMessage('')
     try {
       const nextStatus = role.status === 'active' ? 'disabled' : 'active'
-      await setCustomRoleStatus(role.id, nextStatus)
+      if (nextStatus === 'active') await enableCustomRole(role.id)
+      else await disableCustomRole(role.id)
       await loadData()
       setMessage(`Đã ${nextStatus === 'active' ? 'enable' : 'disable'} ${role.id}.`)
     } catch (statusError) {
@@ -176,7 +172,7 @@ export default function AdminRolesPage() {
     setError('')
     setMessage('')
     try {
-      await removeCustomRole(deleteTarget.id)
+      await deleteCustomRole(deleteTarget.id)
       await loadData()
       setViewingRoleId((current) => current === deleteTarget.id ? '' : current)
       setMessage(`Đã xóa Custom Role ${deleteTarget.id}.`)
@@ -204,7 +200,6 @@ export default function AdminRolesPage() {
 
     <section className="admin-card custom-role-section">
       <div className="admin-section-heading"><div><h3>Custom Roles</h3><p>Custom Roles độc lập với hierarchy và chỉ nhận permission được policy cho phép.</p></div>{canCreate && <button className="admin-primary-button" type="button" onClick={openCreate}>+ Tạo Custom Role</button>}</div>
-      {hasTrustedRoleMutation && <p className="admin-warning">Đổi permission/trạng thái hoặc xóa role phải chạy qua trusted Admin SDK tool để rebuild authorization cho tất cả user bị ảnh hưởng.</p>}
       {message && <p className="admin-success" role="status">{message}</p>}
       {error && <p className="admin-error" role="alert">{error}</p>}
       {showForm && <RoleForm form={form} editing={Boolean(editingId)} saving={saving} onChange={setForm} onTogglePermission={togglePermission} onSubmit={saveRole} onCancel={() => { setShowForm(false); setEditingId('') }} />}

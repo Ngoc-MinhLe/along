@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getFunctions } from 'firebase/functions'
 import { firebaseConfig, isFirebaseConfigured } from './config'
 
 export const firebaseApp = isFirebaseConfigured
@@ -9,3 +10,4 @@ export const firebaseApp = isFirebaseConfigured
 
 export const auth = firebaseApp ? getAuth(firebaseApp) : null
 export const db = firebaseApp ? getFirestore(firebaseApp) : null
+export const functions = firebaseApp ? getFunctions(firebaseApp) : null
