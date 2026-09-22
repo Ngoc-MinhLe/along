@@ -1,15 +1,15 @@
 const { HttpsError } = require('firebase-functions/v2/https')
 const { adminAuth, adminDb } = require('./admin')
 
-const SYSTEM_ROLES = Object.freeze([
-  'USER',
-  'EDITOR',
-  'ADMIN',
-  'SUPER_ADMIN',
-  'ROOT_ADMIN',
-])
+const SYSTEM_ROLES = Object.freeze({
+  USER: 'USER',
+  EDITOR: 'EDITOR',
+  ADMIN: 'ADMIN',
+  SUPER_ADMIN: 'SUPER_ADMIN',
+  ROOT_ADMIN: 'ROOT_ADMIN',
+})
 
-const SYSTEM_ROLE_SET = new Set(SYSTEM_ROLES)
+const SYSTEM_ROLE_SET = new Set(Object.values(SYSTEM_ROLES))
 const PERMISSIONS = Object.freeze([
   'users.read',
   'users.create',
@@ -200,6 +200,21 @@ function requireSystemRole(actor, role) {
   return true
 }
 
+function canManageCustomRole(actor, role, action) {
+  if (!role || role.type !== 'CUSTOM' || typeof action !== 'string') return false
+  if (hasSystemRole(actor, 'ROOT_ADMIN')) return true
+  return hasPermission(actor, `roles.${action}`)
+    && Array.isArray(role.permissions)
+    && role.permissions.every((permission) => hasPermission(actor, permission))
+}
+
+function requireCanManageCustomRole(actor, role, action) {
+  if (!canManageCustomRole(actor, role, action)) {
+    throw new HttpsError('permission-denied', `The actor cannot perform roles.${action} for this Custom Role.`)
+  }
+  return true
+}
+
 async function readActorAuthorizationWithDb(uid, db) {
   if (typeof uid !== 'string' || !uid) return null
   let snapshot
@@ -262,6 +277,8 @@ module.exports = {
   requirePermission,
   hasSystemRole,
   requireSystemRole,
+  canManageCustomRole,
+  requireCanManageCustomRole,
   isRootActor,
   requireRootActor,
   SYSTEM_ROLES,

@@ -7,8 +7,12 @@ const {
   requirePermission,
   hasSystemRole,
   requireSystemRole,
+  canManageCustomRole,
+  requireCanManageCustomRole,
   isRootActor,
   requireRootActor,
+  SYSTEM_ROLES,
+  PERMISSIONS,
 } = require('./auth')
 
 module.exports = {
@@ -20,6 +24,10 @@ module.exports = {
   requirePermission,
   hasSystemRole,
   requireSystemRole,
+  canManageCustomRole,
+  requireCanManageCustomRole,
   isRootActor,
   requireRootActor,
+  SYSTEM_ROLES,
+  PERMISSIONS,
 }
