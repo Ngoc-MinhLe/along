@@ -103,14 +103,19 @@ async function readEntitlement(uid, db) {
   const snapshot = await db.doc(`contentEntitlements/${uid}`).get()
   if (!snapshot.exists) return null
   const entitlement = snapshot.data()
-  if (!entitlement || !Number.isInteger(entitlement.newsLevel)
+  if (!entitlement || entitlement.uid !== uid || !Number.isInteger(entitlement.newsLevel)
     || entitlement.newsLevel < 0 || entitlement.newsLevel > 3) return null
   return isWithinEntitlementWindow(entitlement) ? entitlement : null
 }
 
 async function hasAclAccess(uid, aclPath, db) {
   const snapshot = await db.collection(aclPath).get()
-  const entries = snapshot.docs.map((item) => item.data()).filter((entry) => entry?.effect === 'ALLOW')
+  const entries = snapshot.docs
+    .map((item) => item.data())
+    .filter((entry) => entry?.effect === 'ALLOW'
+      && ['USER', 'GROUP'].includes(entry.principalType)
+      && typeof entry.principalId === 'string'
+      && entry.principalId.length > 0)
   if (entries.some((entry) => entry.principalType === 'USER' && entry.principalId === uid)) return true
 
   const groupIds = [...new Set(entries
@@ -118,12 +123,16 @@ async function hasAclAccess(uid, aclPath, db) {
     .map((entry) => entry.principalId))]
   if (!groupIds.length) return false
 
-  const memberships = await Promise.all(groupIds.map((groupId) => db.doc(`newsGroups/${groupId}/members/${uid}`).get()))
-  return memberships.some((membership) => {
-    if (!membership.exists) return false
+  const memberships = await Promise.all(groupIds.map(async (groupId) => {
+    const [group, membership] = await Promise.all([
+      db.doc(`newsGroups/${groupId}`).get(),
+      db.doc(`newsGroups/${groupId}/members/${uid}`).get(),
+    ])
+    if (!group.exists || group.data()?.status !== 'active' || !membership.exists) return false
     const data = membership.data()
-    return data?.status === 'active' && isWithinEntitlementWindow(data)
-  })
+    return data?.uid === uid && data?.status === 'active' && isWithinEntitlementWindow(data)
+  }))
+  return memberships.some(Boolean)
 }
 
 async function canReadArticle(actor, article, policyResult, db) {

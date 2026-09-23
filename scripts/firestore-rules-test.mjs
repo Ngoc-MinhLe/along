@@ -196,7 +196,10 @@ try {
   await deny('8.1 guest cannot directly read News article', getDoc(doc(guestDb, 'newsArticles', 'PUBLIC_ARTICLE')))
   await deny('8.1 user cannot directly read News article', getDoc(doc(userDb, 'newsArticles', 'PUBLIC_ARTICLE')))
   await deny('8.1 client cannot create News article', setDoc(doc(rootDb, 'newsArticles', 'CLIENT_WRITE'), { status: 'published' }))
+  await deny('8.2 client cannot update News article', updateDoc(doc(rootDb, 'newsArticles', 'PUBLIC_ARTICLE'), { status: 'published' }))
+  await deny('8.2 client cannot create News category', setDoc(doc(rootDb, 'newsCategories', 'CLIENT_WRITE'), { status: 'active' }))
   await deny('8.1 client cannot write News ACL', setDoc(doc(rootDb, 'newsArticles', 'PUBLIC_ARTICLE', 'acl', 'CLIENT_WRITE'), { effect: 'ALLOW' }))
+  await deny('8.2 client cannot write News group membership', setDoc(doc(rootDb, 'newsGroups', 'GROUP', 'members', USER_UID), { status: 'active' }))
   await deny('8.1 client cannot write News entitlement', setDoc(doc(rootDb, 'contentEntitlements', USER_UID), { newsLevel: 3, status: 'active' }))
 
   results.forEach((result) => console.log(result))

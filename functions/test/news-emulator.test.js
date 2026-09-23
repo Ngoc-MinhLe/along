@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const { getApps, initializeApp } = require('firebase-admin/app')
 const { getAuth } = require('firebase-admin/auth')
 const { getFirestore, Timestamp } = require('firebase-admin/firestore')
+const { PERMISSIONS } = require('../src/auth')
 
 const PROJECT_ID = process.env.GCLOUD_PROJECT || 'along-news-audit'
 const AUTH_EMULATOR_URL = 'http://127.0.0.1:9099'
@@ -13,13 +14,13 @@ const app = getApps()[0] || initializeApp({ projectId: PROJECT_ID })
 const auth = getAuth(app)
 const db = getFirestore(app)
 
-function profile(uid) {
+function profile(uid, systemRole = 'USER') {
   return {
     uid,
     email: `${uid}@example.test`,
     displayName: uid,
     photoURL: '',
-    systemRole: 'USER',
+    systemRole,
     status: 'active',
     customRoles: [],
     createdAt: now,
@@ -28,15 +29,15 @@ function profile(uid) {
   }
 }
 
-async function createAccount(uid, permissions = []) {
+async function createAccount(uid, permissions = [], systemRole = 'USER') {
   await auth.createUser({ uid, email: `${uid}@example.test`, password: PASSWORD })
-  await auth.setCustomUserClaims(uid, { systemRole: 'USER', roleVersion: 1 })
-  await db.doc(`users/${uid}`).set(profile(uid))
+  await auth.setCustomUserClaims(uid, { systemRole, roleVersion: 1 })
+  await db.doc(`users/${uid}`).set(profile(uid, systemRole))
   await db.doc(`userAuthorizations/${uid}`).set({
     uid,
-    systemRole: 'USER',
+    systemRole,
     customRoles: [],
-    permissions: ['calendar.search', 'calendar.export', ...permissions],
+    permissions: [...new Set(['calendar.search', 'calendar.export', ...permissions])],
     version: 1,
     updatedAt: now,
   })
@@ -85,7 +86,7 @@ async function denied(operation, expectedCode = null) {
     error = caught
   }
   assert.ok(error, 'Expected News operation to be denied.')
-  if (expectedCode) assert.equal(error.code, expectedCode)
+  if (expectedCode) assert.equal(error.code, expectedCode, error.message)
 }
 
 function article(id, accessPolicy, extra = {}) {
@@ -112,6 +113,15 @@ async function main() {
   await createAccount('news-special-user', ['news.read'])
   await createAccount('news-special-group', ['news.read'])
   await createAccount('news-no-read')
+  await createAccount('news-editor', [
+    'calendar.search', 'calendar.export', 'news.read', 'news.create', 'news.update', 'news.publish',
+  ], 'EDITOR')
+  await createAccount('news-admin', [
+    'calendar.search', 'calendar.export', 'news.read', 'news.create', 'news.update', 'news.delete', 'news.publish',
+  ], 'ADMIN')
+  await createAccount('news-super', PERMISSIONS, 'SUPER_ADMIN')
+  await createAccount('news-root', PERMISSIONS, 'ROOT_ADMIN')
+  await createAccount('news-user-manager', ['news.read', 'news.update'])
 
   await db.doc('newsCategories/GENERAL').set({
     id: 'GENERAL',
@@ -144,6 +154,7 @@ async function main() {
   await db.doc('newsCategories/SPECIAL_CATEGORY/acl/group-entry').set({
     principalType: 'GROUP', principalId: 'NEWS_GROUP', effect: 'ALLOW', createdAt: now,
   })
+  await db.doc('newsGroups/NEWS_GROUP').set({ id: 'NEWS_GROUP', status: 'active', createdAt: now })
   await db.doc('newsGroups/NEWS_GROUP/members/news-special-group').set({
     uid: 'news-special-group', status: 'active', addedAt: now,
   })
@@ -153,6 +164,11 @@ async function main() {
   const specialUserToken = await signIn('news-special-user')
   const specialGroupToken = await signIn('news-special-group')
   const noReadToken = await signIn('news-no-read')
+  const editorToken = await signIn('news-editor')
+  const adminToken = await signIn('news-admin')
+  const superToken = await signIn('news-super')
+  const rootToken = await signIn('news-root')
+  const userManagerToken = await signIn('news-user-manager')
 
   const guestPublic = await call('getNewsArticle', null, { articleId: 'PUBLIC_ARTICLE' })
   assert.equal(guestPublic.article.id, 'PUBLIC_ARTICLE')
@@ -171,6 +187,9 @@ async function main() {
   assert.equal((await call('getNewsArticle', vip3Token, { articleId: 'VIP3_ARTICLE' })).article.id, 'VIP3_ARTICLE')
   await denied(() => call('getNewsArticle', noReadToken, { articleId: 'VIP1_ARTICLE' }), 'not-found')
   assert.equal((await call('getNewsArticle', noReadToken, { articleId: 'PUBLIC_ARTICLE' })).article.id, 'PUBLIC_ARTICLE')
+  await db.doc('contentEntitlements/news-vip1').update({ uid: 'wrong-user' })
+  await denied(() => call('getNewsArticle', vip1Token, { articleId: 'VIP1_ARTICLE' }), 'not-found')
+  await db.doc('contentEntitlements/news-vip1').update({ uid: 'news-vip1' })
 
   assert.equal((await call('getNewsArticle', specialUserToken, { articleId: 'SPECIAL_USER_ARTICLE' })).article.id, 'SPECIAL_USER_ARTICLE')
   await denied(() => call('getNewsArticle', specialGroupToken, { articleId: 'SPECIAL_USER_ARTICLE' }), 'not-found')
@@ -184,7 +203,111 @@ async function main() {
 
   await denied(() => call('getNewsArticle', vip1Token, { articleId: 'PUBLIC_ARTICLE', role: 'ROOT_ADMIN' }), 'invalid-argument')
 
-  console.log('News trusted read emulator integration PASS: public, VIP thresholds, special user/group ACL, draft denial, payload validation, and server-side authorization verified.')
+  // Phase 8.2 trusted mutations: draft lifecycle and public access.
+  await denied(() => call('createNewsArticle', null, {
+    title: 'Guest cannot create', content: 'x', accessPolicy: { mode: 'PUBLIC' },
+  }), 'unauthenticated')
+  await denied(() => call('createNewsArticle', noReadToken, {
+    title: 'User cannot create', content: 'x', accessPolicy: { mode: 'PUBLIC' },
+  }), 'permission-denied')
+  await denied(() => call('createNewsArticle', editorToken, {
+    actorUid: 'forged', title: 'Forged actor', content: 'x', accessPolicy: { mode: 'PUBLIC' },
+  }), 'invalid-argument')
+  await denied(() => call('createNewsArticle', editorToken, {
+    title: 'Client status', content: 'x', status: 'published', accessPolicy: { mode: 'PUBLIC' },
+  }), 'invalid-argument')
+
+  const created = await call('createNewsArticle', editorToken, {
+    title: 'Managed Article',
+    excerpt: 'Managed excerpt',
+    content: 'Managed content',
+    contentFormat: 'MARKDOWN',
+    accessPolicy: { mode: 'PUBLIC' },
+  })
+  assert.equal(created.status, 'draft')
+  await denied(() => call('getNewsArticle', null, { articleId: created.articleId }), 'not-found')
+  await call('updateNewsArticle', editorToken, {
+    articleId: created.articleId, title: 'Updated Managed Article', content: 'Updated content',
+  })
+  await call('publishNewsArticle', editorToken, { articleId: created.articleId })
+  assert.equal((await call('getNewsArticle', null, { articleId: created.articleId })).article.title, 'Updated Managed Article')
+  await call('unpublishNewsArticle', editorToken, { articleId: created.articleId })
+  await denied(() => call('getNewsArticle', null, { articleId: created.articleId }), 'not-found')
+
+  // Access policy and VIP escalation are controlled by trusted permission and entitlement data.
+  await denied(() => call('setNewsAccessPolicy', noReadToken, {
+    articleId: 'PUBLIC_ARTICLE', accessPolicy: { mode: 'VIP', minVipLevel: 3 },
+  }), 'permission-denied')
+  await denied(() => call('setNewsAccessPolicy', editorToken, {
+    articleId: 'PUBLIC_ARTICLE', accessPolicy: { mode: 'VIP', minVipLevel: 4 },
+  }), 'invalid-argument')
+  await call('setNewsAccessPolicy', editorToken, {
+    articleId: created.articleId, accessPolicy: { mode: 'VIP', minVipLevel: 2 },
+  })
+  await call('publishNewsArticle', editorToken, { articleId: created.articleId })
+  await db.doc('contentEntitlements/news-editor').set({ uid: 'news-editor', newsLevel: 1, status: 'active', startsAt: now })
+  await denied(() => call('getNewsArticle', editorToken, { articleId: created.articleId }), 'not-found')
+  await db.doc('contentEntitlements/news-editor').update({ newsLevel: 2 })
+  assert.equal((await call('getNewsArticle', editorToken, { articleId: created.articleId })).article.id, created.articleId)
+
+  // Category, article ACL and group ACL mutations are server-side only.
+  const specialCategory = await call('createNewsCategory', superToken, {
+    name: 'Managed Special', defaultAccessPolicy: { mode: 'SPECIAL' },
+  })
+  const specialArticle = await call('createNewsArticle', editorToken, {
+    title: 'Managed Special Article', content: 'Special content', categoryId: specialCategory.categoryId,
+    accessPolicy: { mode: 'SPECIAL' },
+  })
+  await call('publishNewsArticle', editorToken, { articleId: specialArticle.articleId })
+  await denied(() => call('getNewsArticle', specialUserToken, { articleId: specialArticle.articleId }), 'not-found')
+  const userAcl = await call('setNewsAclEntry', adminToken, {
+    scope: 'ARTICLE', resourceId: specialArticle.articleId,
+    principalType: 'USER', principalId: 'news-special-user',
+  })
+  assert.equal(typeof userAcl.aclId, 'string')
+  assert.equal((await call('getNewsArticle', specialUserToken, { articleId: specialArticle.articleId })).article.id, specialArticle.articleId)
+  await denied(() => call('setNewsAclEntry', userManagerToken, {
+    scope: 'ARTICLE', resourceId: specialArticle.articleId,
+    principalType: 'USER', principalId: 'news-user-manager',
+  }), 'permission-denied')
+  await denied(() => call('setNewsAclEntry', noReadToken, {
+    scope: 'ARTICLE', resourceId: specialArticle.articleId,
+    principalType: 'USER', principalId: 'news-no-read',
+  }), 'permission-denied')
+  await denied(() => call('setNewsAclEntry', adminToken, {
+    scope: 'ARTICLE', resourceId: specialArticle.articleId,
+    principalType: 'USER', principalId: 'news-special-user', effect: 'ALLOW',
+  }), 'invalid-argument')
+  await call('removeNewsAclEntry', adminToken, {
+    scope: 'ARTICLE', resourceId: specialArticle.articleId,
+    principalType: 'USER', principalId: 'news-special-user',
+  })
+  await denied(() => call('getNewsArticle', specialUserToken, { articleId: specialArticle.articleId }), 'not-found')
+
+  await db.doc('newsGroups/MANAGED_GROUP').set({ id: 'MANAGED_GROUP', status: 'active', createdAt: now })
+  await db.doc('newsGroups/MANAGED_GROUP/members/news-special-group').set({ uid: 'news-special-group', status: 'active', addedAt: now })
+  await call('setNewsAclEntry', adminToken, {
+    scope: 'CATEGORY', resourceId: specialCategory.categoryId,
+    principalType: 'GROUP', principalId: 'MANAGED_GROUP',
+  })
+  const inheritedArticle = await call('createNewsArticle', editorToken, {
+    title: 'Inherited Special Article', content: 'Inherited content', categoryId: specialCategory.categoryId,
+    accessPolicy: { mode: 'INHERIT', inheritCategory: true },
+  })
+  await call('publishNewsArticle', editorToken, { articleId: inheritedArticle.articleId })
+  assert.equal((await call('getNewsArticle', specialGroupToken, { articleId: inheritedArticle.articleId })).article.id, inheritedArticle.articleId)
+
+  // Malformed ACL data is ignored by trusted reads and cannot grant access.
+  await db.doc(`newsArticles/${specialArticle.articleId}/acl/malformed`).set({ effect: 'ALLOW', principalType: 'USER', principalId: 123 })
+  await denied(() => call('getNewsArticle', specialGroupToken, { articleId: specialArticle.articleId }), 'not-found')
+
+  await call('updateNewsCategory', rootToken, { categoryId: specialCategory.categoryId, description: 'Updated category' })
+  await denied(() => call('deleteNewsCategory', adminToken, { categoryId: specialCategory.categoryId }), 'failed-precondition')
+  await denied(() => call('setNewsAccessPolicy', noReadToken, {
+    actorUid: 'forged', articleId: specialArticle.articleId, accessPolicy: { mode: 'PUBLIC' },
+  }), 'invalid-argument')
+
+  console.log('News trusted read/mutation emulator integration PASS: access policy, article lifecycle, category/ACL mutation, VIP escalation denial, malformed ACL denial, and server-side authorization verified.')
 }
 
 main().catch((error) => {
