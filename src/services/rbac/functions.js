@@ -48,9 +48,9 @@ export function deleteCustomRole(roleId) {
 }
 
 export function assignCustomRole(targetUid, roleId) {
-  return callFunction('assignCustomRole', { targetUid, roleId })
+  return callFunction('assignCustomRole', { targetUid, customRoleId: roleId })
 }
 
 export function revokeCustomRole(targetUid, roleId) {
-  return callFunction('revokeCustomRole', { targetUid, roleId })
+  return callFunction('revokeCustomRole', { targetUid, customRoleId: roleId })
 }

@@ -154,6 +154,41 @@ async function main() {
   assert.equal(createdRole.createdBy, 'root-test')
   assert.equal(createdRole.type, 'CUSTOM')
 
+  const rootAssigned = await call('assignCustomRole', rootToken, { targetUid: 'user-test', customRoleId: created.roleId })
+  assert.equal(rootAssigned.targetUid, 'user-test')
+  assert.equal((await readUser('user-test')).customRoles.includes(created.roleId), true)
+  assert.equal((await readAuthorization('user-test')).customRoles.includes(created.roleId), true)
+  assert.equal((await readAuthorization('user-test')).permissions.includes('news.read'), true)
+  await call('revokeCustomRole', rootToken, { targetUid: 'user-test', customRoleId: created.roleId })
+
+  await db.doc('roles/LEGACY_FORBIDDEN_ROLE').set({
+    id: 'LEGACY_FORBIDDEN_ROLE',
+    name: 'Legacy Forbidden Role',
+    description: '',
+    type: 'CUSTOM',
+    status: 'active',
+    permissions: ['roles.assign'],
+    createdBy: 'root-test',
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+  })
+  await db.doc('users/user-test').set({ customRoles: ['LEGACY_FORBIDDEN_ROLE'] }, { merge: true })
+  await db.doc('userAuthorizations/user-test').set({
+    uid: 'user-test',
+    systemRole: 'USER',
+    customRoles: ['LEGACY_FORBIDDEN_ROLE'],
+    permissions: rolePermissions('USER'),
+    version: 2,
+    updatedAt: Timestamp.now(),
+  })
+  const legacySafeAssignment = await call('assignCustomRole', rootToken, { targetUid: 'user-test', customRoleId: created.roleId })
+  assert.equal(legacySafeAssignment.targetUid, 'user-test')
+  const legacySafeAuthorization = await readAuthorization('user-test')
+  assert.equal(legacySafeAuthorization.customRoles.includes('LEGACY_FORBIDDEN_ROLE'), true)
+  assert.equal(legacySafeAuthorization.permissions.includes('roles.assign'), false)
+  assert.equal(legacySafeAuthorization.permissions.includes('news.read'), true)
+  await call('revokeCustomRole', rootToken, { targetUid: 'user-test', customRoleId: created.roleId })
+
   const superCreated = await call('createCustomRole', superToken, { name: 'Super Created', permissions: ['news.read'] })
   assert.equal(superCreated.roleId, 'SUPER_CREATED')
 
@@ -168,15 +203,18 @@ async function main() {
     roleId: 'USER', name: 'Invalid', description: '', permissions: ['news.read'],
   }), 'invalid-argument')
 
-  const assigned = await call('assignCustomRole', adminToken, { targetUid: 'target-test', roleId: created.roleId })
+  const assigned = await call('assignCustomRole', adminToken, { targetUid: 'target-test', customRoleId: created.roleId })
   assert.equal(assigned.targetUid, 'target-test')
   assert.equal((await readUser('target-test')).customRoles.includes(created.roleId), true)
   assert.equal((await readAuthorization('target-test')).permissions.includes('news.read'), true)
-  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'target-test', roleId: created.roleId }), 'already-exists')
-  await denied(() => call('assignCustomRole', rootToken, { targetUid: 'root-test', roleId: created.roleId }), 'permission-denied')
-  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'missing-target', roleId: created.roleId }), 'not-found')
-  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'target-test', roleId: 'MISSING_ROLE' }), 'not-found')
-  await denied(() => call('revokeCustomRole', adminToken, { targetUid: 'target-test', roleId: 'MISSING_ROLE' }), 'not-found')
+  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'target-test', customRoleId: created.roleId }), 'already-exists')
+  await denied(() => call('assignCustomRole', rootToken, { targetUid: 'root-test', customRoleId: created.roleId }), 'permission-denied')
+  await denied(() => call('assignCustomRole', userToken, { targetUid: 'user-test', customRoleId: created.roleId }), 'permission-denied')
+  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'missing-target', customRoleId: created.roleId }), 'not-found')
+  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'target-test', customRoleId: 'MISSING_ROLE' }), 'not-found')
+  await denied(() => call('revokeCustomRole', adminToken, { targetUid: 'target-test', customRoleId: 'MISSING_ROLE' }), 'not-found')
+  await denied(() => call('assignCustomRole', rootToken, { actorUid: 'forged', targetUid: 'target-test', customRoleId: created.roleId }), 'invalid-argument')
+  await denied(() => call('assignCustomRole', rootToken, { targetUid: 'target-test', roleId: created.roleId }), 'invalid-argument')
 
   const updated = await call('updateCustomRole', rootToken, {
     roleId: created.roleId,
@@ -190,18 +228,18 @@ async function main() {
   const disabled = await call('disableCustomRole', rootToken, { roleId: created.roleId })
   assert.equal(disabled.affectedUserCount, 1)
   assert.equal((await readAuthorization('target-test')).permissions.includes('news.read'), false)
-  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'user-test', roleId: created.roleId }), 'failed-precondition')
+  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'user-test', customRoleId: created.roleId }), 'failed-precondition')
 
   const enabled = await call('enableCustomRole', rootToken, { roleId: created.roleId })
   assert.equal(enabled.affectedUserCount, 1)
   assert.equal((await readAuthorization('target-test')).permissions.includes('calendar.import'), true)
 
   await denied(() => call('deleteCustomRole', rootToken, { roleId: created.roleId }), 'failed-precondition')
-  const revoked = await call('revokeCustomRole', adminToken, { targetUid: 'target-test', roleId: created.roleId })
+  const revoked = await call('revokeCustomRole', adminToken, { targetUid: 'target-test', customRoleId: created.roleId })
   assert.equal(revoked.targetUid, 'target-test')
   assert.equal((await readUser('target-test')).customRoles.includes(created.roleId), false)
   assert.equal((await readAuthorization('target-test')).permissions.includes('calendar.import'), false)
-  await denied(() => call('revokeCustomRole', adminToken, { targetUid: 'target-test', roleId: created.roleId }), 'failed-precondition')
+  await denied(() => call('revokeCustomRole', adminToken, { targetUid: 'target-test', customRoleId: created.roleId }), 'failed-precondition')
 
   const deleted = await call('deleteCustomRole', rootToken, { roleId: created.roleId })
   assert.equal(deleted.roleId, created.roleId)
@@ -209,7 +247,7 @@ async function main() {
 
   const disabledRole = await call('createCustomRole', rootToken, { name: 'Disabled Assignment', permissions: ['news.read'] })
   await call('disableCustomRole', rootToken, { roleId: disabledRole.roleId })
-  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'target-test', roleId: disabledRole.roleId }), 'failed-precondition')
+  await denied(() => call('assignCustomRole', adminToken, { targetUid: 'target-test', customRoleId: disabledRole.roleId }), 'failed-precondition')
 
   console.log('Custom Role callable emulator integration PASS: authentication, policy, validation, assignment, rebuild, disable/enable, rollback-safe workflow, and deletion guards verified.')
 }

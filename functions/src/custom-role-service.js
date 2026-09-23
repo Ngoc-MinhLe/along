@@ -125,17 +125,36 @@ function normalizeRoleReferencePayload(data) {
 }
 
 function normalizeAssignmentPayload(data) {
-  assertAllowedKeys(data, ['targetUid', 'roleId'], ['targetUid', 'roleId'])
+  assertAllowedKeys(data, ['targetUid', 'customRoleId'], ['targetUid', 'customRoleId'])
   if (typeof data.targetUid !== 'string' || !data.targetUid.trim()) invalidArgument('targetUid is required.')
-  return { targetUid: data.targetUid.trim(), roleId: normalizeRoleId(data.roleId) }
+  return { targetUid: data.targetUid.trim(), roleId: normalizeRoleId(data.customRoleId) }
+}
+
+function validateCustomRoleData(roleId, role) {
+  if (!role || role.type !== 'CUSTOM') failedPrecondition('System Roles cannot be mutated as Custom Roles.')
+  if (role.id !== roleId || SYSTEM_ROLE_SET.has(role.id)) failedPrecondition('The role document is not a valid Custom Role.')
+  if (!['active', 'disabled'].includes(role.status)) failedPrecondition('The Custom Role status is invalid.')
+  if (!Array.isArray(role.permissions)) failedPrecondition('The Custom Role permissions are invalid.')
+  const invalidPermissions = [...new Set(role.permissions)].filter((permission) => !PERMISSION_SET.has(permission))
+  if (invalidPermissions.length) failedPrecondition('The Custom Role contains an unknown permission.')
+  const forbiddenPermissions = [...new Set(role.permissions)].filter((permission) => FORBIDDEN_CUSTOM_PERMISSIONS.has(permission))
+  if (forbiddenPermissions.length) failedPrecondition('The Custom Role contains a policy-protected permission.')
+  return role
 }
 
 function roleFromSnapshot(roleId, snapshot) {
   if (!snapshot.exists) notFound(`Custom Role ${roleId} was not found.`)
-  const role = { id: snapshot.id, ...snapshot.data() }
-  if (role.type !== 'CUSTOM') failedPrecondition('System Roles cannot be mutated as Custom Roles.')
-  if (role.id !== roleId || SYSTEM_ROLE_SET.has(role.id)) failedPrecondition('The role document is not a valid Custom Role.')
-  return role
+  return validateCustomRoleData(roleId, { id: snapshot.id, ...snapshot.data() })
+}
+
+function validatedRoleEntry(snapshot) {
+  if (!snapshot.exists) return null
+  try {
+    const role = roleFromSnapshot(snapshot.id, snapshot)
+    return [snapshot.id, role]
+  } catch {
+    return null
+  }
 }
 
 async function readRole(roleId, db = adminDb) {
@@ -176,9 +195,7 @@ async function readUserAuthorization(uid, db = adminDb) {
 async function readRoleMap(roleIds, db = adminDb) {
   const uniqueRoleIds = [...new Set(roleIds)]
   const snapshots = await Promise.all(uniqueRoleIds.map((roleId) => db.doc(`roles/${roleId}`).get()))
-  return Object.fromEntries(snapshots
-    .filter((snapshot) => snapshot.exists)
-    .map((snapshot) => [snapshot.id, { id: snapshot.id, ...snapshot.data() }]))
+  return Object.fromEntries(snapshots.map(validatedRoleEntry).filter(Boolean))
 }
 
 function buildAuthorizationData(profile, roleMap, currentAuthorization) {
@@ -186,9 +203,14 @@ function buildAuthorizationData(profile, roleMap, currentAuthorization) {
   const permissions = new Set(ROLE_PERMISSIONS[profile.systemRole] || [])
   for (const roleId of profile.customRoles) {
     const role = roleMap[roleId]
-    if (role?.type !== 'CUSTOM' || role.status !== 'active') continue
+    try {
+      validateCustomRoleData(roleId, role)
+    } catch {
+      continue
+    }
+    if (role.status !== 'active') continue
     for (const permission of role.permissions || []) {
-      if (PERMISSION_SET.has(permission)) permissions.add(permission)
+      if (PERMISSION_SET.has(permission) && !FORBIDDEN_CUSTOM_PERMISSIONS.has(permission)) permissions.add(permission)
     }
   }
   const currentVersion = Number.isSafeInteger(currentAuthorization?.version) && currentAuthorization.version >= 1
@@ -413,9 +435,7 @@ async function mutateAssignment(actor, data, operation, db = adminDb) {
       : currentRoles.filter((roleId) => roleId !== payload.roleId)
     const roleIds = [...new Set(nextRoles)]
     const roleSnapshots = await Promise.all(roleIds.map((roleId) => transaction.get(db.doc(`roles/${roleId}`))))
-    const roleMap = Object.fromEntries(roleSnapshots
-      .filter((snapshot) => snapshot.exists)
-      .map((snapshot) => [snapshot.id, { id: snapshot.id, ...snapshot.data() }]))
+    const roleMap = Object.fromEntries(roleSnapshots.map(validatedRoleEntry).filter(Boolean))
     if (operation === 'assignCustomRole') roleMap[payload.roleId] = freshRole
     const currentAuthorization = authorizationSnapshot.exists ? authorizationSnapshot.data() : null
     const authorization = buildAuthorizationData(

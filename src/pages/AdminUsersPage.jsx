@@ -7,7 +7,6 @@ import { ROLE_HIERARCHY, SYSTEM_ROLES } from '../services/rbac/roles'
 import { listCustomRoles, listUsers } from '../services/rbac/firestore'
 import { assignCustomRole, revokeCustomRole } from '../services/rbac/functions'
 
-const ROOT_UID = 'xITEdVIGAzXgudknovO0FROvNop1'
 const PAGE_SIZE = 25
 const STATUS_OPTIONS = ['active', 'suspended', 'deletion_requested', 'deleted']
 const SORT_OPTIONS = [
@@ -225,7 +224,7 @@ function RevokeModal({ target, roleMap, busy, onCancel, onConfirm }) {
 }
 
 function isRootUser(user) {
-  return user?.uid === ROOT_UID || user?.id === ROOT_UID || getSystemRole(user) === SYSTEM_ROLES.ROOT_ADMIN
+  return getSystemRole(user) === SYSTEM_ROLES.ROOT_ADMIN
 }
 
 function isProtectedTarget(user, currentUser) {
