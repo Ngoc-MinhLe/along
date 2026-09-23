@@ -1,6 +1,6 @@
 # PROJECT STATUS
 
-Last reviewed: 2026-09-21
+Last reviewed: 2026-09-23
 
 ## 1. Project Overview
 
@@ -8,30 +8,30 @@ Last reviewed: 2026-09-21
 - Purpose: web application for Vietnamese calendar lookup, with an Excel-to-Firestore calendar data flow and a shared Firebase Authentication/RBAC foundation.
 - Frontend stack: React 19, Vite, JavaScript/JSX, React Router.
 - Backend/data: Firebase Web SDK, Firebase Authentication and Cloud Firestore.
-- Trusted administration: Firebase Admin SDK local scripts using Application Default Credentials and a fresh ROOT ID token; no separate application server is present.
+- Trusted administration: Firebase Cloud Functions with Firebase Admin SDK, plus local Admin SDK tools for maintenance and verification. Admin SDK is not used in the frontend.
 - Excel: SheetJS (`xlsx`).
 - Firebase project: `along-6e1ce`.
 - Repository: `https://github.com/Ngoc-MinhLe/along.git`.
 - Deployment configuration: Vite builds to `dist`; `vercel.json` rewrites SPA routes to `index.html`.
 - Package manager: npm.
-- Current state: Phase 6B is completed locally and remains uncommitted. No production rollout was performed in this phase.
+- Current state: Phase 8 News architecture design is complete; implementation has not started. Only this status document is modified in the current checkpoint.
 
 ## 2. Current Status
 
-Current Phase: 6B
+Current Phase: Phase 8 - News Foundation Design
 
-Status: COMPLETED LOCALLY / NOT YET DEPLOYED
+Status: DESIGN COMPLETE / IMPLEMENTATION NOT STARTED
 
-- Local completed: Phase 6B authorization materialization code, Rules changes, trusted tooling, emulator security tests and production build have been completed and verified.
-- Production deployed: not performed by the current work.
-- Production not deployed: Firestore Rules and authorization materialization have not been rolled out as part of this phase. The exact live Console state must be verified during rollout.
-- Production data: no production roles, users, authorization documents or calendar data were mutated by this phase.
+- Local completed: Phases 1-7A have implementation and regression-test coverage; Phase 8 has design only.
+- Production deployed: Module 1 frontend, Authentication/RBAC frontend, current Firestore Rules, Phase 6C Functions and Phase 7A Custom Role assignment are deployed according to the project rollout record.
+- Production verified: Phase 7B smoke test was completed manually with ROOT_ADMIN and a USER test account.
+- Production data: the intentional `TEST_ADMIN` smoke-test assignment was created, verified after logout/login, and cleaned up through the valid workflow. No News production data exists or was created.
 
 ## 3. Phase History
 
 ### Phase 1 — Module 1 / Calendar
 
-Status: implemented locally and used in the application.
+Status: implemented and deployed in the current frontend; production Module 1 flow is retained.
 
 - Dynamic `.xlsx` parsing reads the `LỊCH` sheet and keeps the source header names and values.
 - The parser does not require a fixed row count, year, day count or hard-coded business header such as `Lịch âm`.
@@ -50,7 +50,7 @@ Tests relevant to the current state: Rules emulator confirms public calendar rea
 
 ### Phase 2 — Authentication
 
-Status: implemented locally.
+Status: implemented and production authentication is operational.
 
 - Google Login via `GoogleAuthProvider` and popup.
 - Email/password registration and login via Firebase Auth.
@@ -59,11 +59,11 @@ Status: implemented locally.
 - First login creates `users/{uid}` with default `systemRole: USER` and `status: active`; registration cannot submit a role.
 - User profile updates preserve role/status and do not store passwords in Firestore.
 
-Known limitation: profile creation depends on the deployed `users` Rules matching the local Rules. Production behavior must be verified during rollout.
+Known limitation: profile creation still depends on the deployed `users` Rules matching the local Rules; the current production login/profile flow has been verified.
 
 ### Phase 3 — RBAC Engine
 
-Status: implemented locally.
+Status: implemented and included in the deployed RBAC baseline.
 
 - Separate System Roles and Custom Roles.
 - Permission catalog and effective-permission union.
@@ -76,7 +76,7 @@ Test: `npm run test:rbac` PASS.
 
 ### Phase 4A — Custom Role Management
 
-Status: implemented locally.
+Status: implemented and included in the deployed RBAC baseline.
 
 - Custom Role creation, metadata update, status handling and role display.
 - Browser role creation is limited by Rules and permission policy.
@@ -85,13 +85,13 @@ Status: implemented locally.
 
 ### Phase 4A.1 — Security Audit
 
-Status: completed in the current Rules/test history.
+Status: completed and covered by deployed Rules/test history.
 
 - Client attempts to change System Role, status, custom roles, protected ROOT data and permission data are denied by the emulator tests.
 
 ### Phase 4A.2 — Role ID UX
 
-Status: implemented locally.
+Status: implemented and included in the deployed RBAC baseline.
 
 - The browser form does not ask the user for Role ID.
 - Role ID is generated from the role name: uppercase, accent-free, normalized to underscores and made unique with `_2`, `_3`, etc.
@@ -99,7 +99,7 @@ Status: implemented locally.
 
 ### Phase 4B — System Role Management Boundary
 
-Status: implemented locally.
+Status: implemented and included in the deployed RBAC baseline.
 
 - System Role changes are separated from Custom Role workflows.
 - Browser direct mutation of System Role is denied.
@@ -107,7 +107,7 @@ Status: implemented locally.
 
 ### Phase 4C — Trusted System Role Admin Tool
 
-Status: implemented locally.
+Status: implemented and included in the deployed RBAC baseline.
 
 - `rbac:set-system-role` uses trusted Admin SDK flow, ROOT authorization, role hierarchy validation, Custom Claims update, Firestore profile update and rollback handling.
 - Claims and Firestore profile consistency are verified after mutation.
@@ -117,7 +117,7 @@ Test: `npm run test:system-role-tool` PASS.
 
 ### Phase 4D — Role Hierarchy + Permission UI
 
-Status: implemented locally.
+Status: implemented and included in the deployed RBAC baseline.
 
 - Admin routes and permission visibility use the RBAC policy.
 - System Role and Custom Role are displayed separately.
@@ -125,7 +125,7 @@ Status: implemented locally.
 
 ### Phase 5 — User Management
 
-Status: implemented locally.
+Status: implemented and included in the deployed RBAC baseline.
 
 - Admin user list, search/filtering, status display, profile details, role display and effective-permission display are present.
 - ROOT and current-user targets are protected in the UI.
@@ -134,7 +134,7 @@ Status: implemented locally.
 
 ### Phase 6A — Permission Enforcement
 
-Status: implemented locally.
+Status: implemented and included in the deployed RBAC baseline.
 
 - `PermissionProvider` and `PermissionGate` are used by the frontend.
 - Calendar import and admin route/UI access are permission-gated.
@@ -143,7 +143,7 @@ Status: implemented locally.
 
 ### Phase 6B — Trusted Authorization Materialization
 
-Status: COMPLETED LOCALLY / NOT YET DEPLOYED.
+Status: deployed and production materialization verified.
 
 - Added `userAuthorizations/{uid}` as the trusted effective-permission materialization.
 - Added Admin SDK rebuild for one user, all users, dry-run and consistency checks.
@@ -152,6 +152,43 @@ Status: COMPLETED LOCALLY / NOT YET DEPLOYED.
 - Rules emulator test suite expanded to 73 assertions.
 
 Tests: `test:authorization`, `test:rbac`, `test:system-role-tool`, `test:rules` and `build` all PASS at the latest review.
+
+### Phase 6C - Trusted Cloud Functions
+
+Status: deployed and operational.
+
+- Trusted Cloud Functions foundation and server-side authorization core are present.
+- Custom Role mutation callables use Firebase Auth context, trusted actor loading and Admin SDK writes.
+- Frontend does not receive or use Admin SDK credentials.
+
+### Phase 7A - ROOT Custom Role Assignment
+
+Status: deployed and production-tested successfully.
+
+- ROOT_ADMIN can assign and revoke an active, policy-valid Custom Role through the trusted callable workflow.
+- Assignment updates `users/{targetUid}.customRoles` and `userAuthorizations/{targetUid}` consistently.
+- ROOT_ADMIN protection, immutable System Roles and client write restrictions remain enforced.
+
+### Phase 7B - Production Smoke Test
+
+Status: PASS / COMPLETED.
+
+- Created and assigned the safe `TEST_ADMIN` smoke-test role with two permitted permissions.
+- Verified the target USER profile and Effective Permissions after assignment.
+- Verified the role and materialized permissions persisted after USER logout/login.
+- Verified ROOT_ADMIN remained protected.
+- Verified USER has no UI/workflow access to policy-protected mutations.
+- Test data was removed through the valid workflow after verification.
+
+### Phase 8 - Module 2: News Foundation & Access Policy
+
+Status: design complete / implementation not started.
+
+- Surveyed the existing RBAC, trusted Functions, Firestore Rules, frontend routes and tests.
+- Proposed PUBLIC, VIP 1/2/3 and SPECIAL ACL access policy without creating a second authorization engine.
+- Proposed News articles, categories, ACL, groups and content entitlement data model.
+- No News source code, collection, Rules match, Function, production data or deployment was created.
+- Next implementation checkpoint: Phase 8.1 - News Access Contract + Trusted Read Authorization.
 
 ## 4. Current Architecture
 
@@ -329,7 +366,7 @@ Current local Rules are in [firestore.rules](../firestore.rules).
 - Permission catalog: no client write path exists and is denied by default.
 - ROOT protection: root lock, claims/profile checks and Rules protections remain in place.
 
-Rules production deployment: not performed in Phase 6B. The local Rules file is authoritative for review, but the live Firebase Console state must be verified before rollout.
+Rules production deployment: current RBAC Rules have been deployed and verified. The local Rules file remains authoritative for future review; no News Rules have been added.
 
 ## 11. Trusted Admin Tools
 
@@ -361,33 +398,33 @@ Latest verified results:
 - `npm run test:rbac`: PASS.
 - `npm run test:system-role-tool`: PASS.
 - `npm run test:rules`: PASS, 73 assertions in the Firestore emulator.
+- `npm run test:functions`: PASS.
+- `npm run check:functions`: PASS.
+- `npm run test:frontend-rbac`: PASS.
 - `npm run build`: PASS. Vite produced `dist`; only a bundle-size warning was reported.
+- Phase 7B production smoke test: PASS, manually verified with ROOT_ADMIN and a USER test account.
 - `git diff --check`: PASS; Git emitted only line-ending normalization warnings.
 
 The Rules test uses the local emulator and does not mutate production Firebase data.
 
 ## 13. Known Limitations
 
-1. A new user does not automatically receive a materialized authorization document because no Cloud Function/backend trigger is deployed. Until a trusted rebuild runs, the frontend falls back to public permissions.
+1. A new user does not automatically receive a materialized authorization document because no auth-user creation trigger is deployed. Until a trusted rebuild runs, the frontend falls back to public permissions.
 2. Calendar export cannot be fully protected while the underlying calendar data is public-readable.
 3. If propagation is interrupted after a role change, a consistency check/rebuild is required.
-4. Production Rules have not been deployed by Phase 6B.
-5. Production authorization documents have not been materialized by Phase 6B.
-6. No Cloud Functions are present; the current design uses local trusted Admin SDK tooling and does not require Blaze.
+4. News Module 2 is designed but not implemented, deployed or populated with production data.
 
-## 14. Production Rollout — NOT YET DONE
+## 14. Production Rollout — CURRENT RBAC SCOPE COMPLETE
 
-- [ ] Production consistency/dry-run.
-- [ ] Check current ROOT authorization and fresh ROOT token.
-- [ ] Materialize authorization for production users.
-- [ ] Verify all authorization documents.
-- [ ] Deploy Firestore Rules.
-- [ ] Verify production security behavior.
-- [ ] Deploy frontend/Vercel.
-- [ ] Run production smoke test.
-- [ ] Verify guest, user, admin and root flows.
+- [x] Phase 6C trusted Functions deployed.
+- [x] Phase 6B Firestore Rules and authorization materialization rollout.
+- [x] Phase 7A Custom Role assignment deployed.
+- [x] Phase 7B Custom Role assignment production smoke test.
+- [x] Verify assignment persistence across USER logout/login.
+- [x] Verify ROOT_ADMIN protection.
+- [x] Current frontend deployed through Vercel.
 
-No item above is marked complete.
+The Phase 8 News implementation and all News production rollout steps remain pending.
 
 ## 15. Modules Not Yet Implemented
 
@@ -401,13 +438,17 @@ Not implemented. Question bank, exam generation, practice mode, exam mode, resul
 
 ## 16. Future Phases
 
-- Phase 7 — News module and its access/ACL policy.
-- Phase 8 — Quiz module, practice and exam workflows.
-- Phase 9 — Approval and audit workflows.
-- Phase 10 — Final security audit and Rules review.
-- Phase 11 — Production hardening, performance, monitoring and UX refinement.
+- Phase 8 — Module 2: News module and its access/ACL policy.
+- Phase 9 — Module 3: Quiz, practice and exam workflows.
+- Phase 10 — Approval and audit workflows.
+- Phase 11 — Final security audit and Rules review.
+- Phase 12 — Production hardening, performance, monitoring and UX refinement.
 
 These are roadmap proposals, not completed features.
+
+Roadmap alignment note: Phase 7A and Phase 7B are the completed Custom Role
+assignment and production verification work. Therefore the next feature phase
+is Phase 8 - Module 2: News; the older Phase 7 News label above is superseded.
 
 ## DO NOT BREAK
 
@@ -448,25 +489,17 @@ These are roadmap proposals, not completed features.
 
 ## NEXT ACTION
 
-Current status: Phase 6B local completed.
+Current status: Phase 8 News architecture design completed; implementation has not started.
 
-Next actions:
+Next phase: Phase 8.1 - News Access Contract + Trusted Read Authorization.
 
-1. Review `docs/PROJECT_STATUS.md`.
-2. Run production dry-run.
-3. Materialize production authorization.
-4. Deploy Rules.
-5. Verify production behavior.
-6. Commit/push after code and documentation review.
-7. Continue with Module 2 — News.
-
-Do not perform production steps automatically as part of this documentation task.
+Before implementation, explicitly approve the News data model, public/VIP access policy, special ACL boundaries, server-side authorization requirements and Rules impact.
 
 ## Final Review Notes
 
-- File created: `docs/PROJECT_STATUS.md`.
+- File updated: `docs/PROJECT_STATUS.md`.
 - All requested status sections are included.
-- Current phase is recorded as `6B`.
-- Local and production status are explicitly separated.
+- Current phase is recorded as `Phase 8 - News Foundation Design`.
+- Phase 7A and 7B production results are recorded separately from local regression results.
 - Known limitations and rollout checklist are recorded.
 - No application code, Firestore Rules, Firebase data, deployment or Git history was changed by this documentation task.

@@ -1,4 +1,5 @@
 const {
+  assertNoClientActorUid,
   readActorAuthorization,
   readActorProfile,
   readAuthoritativeClaims,
@@ -16,6 +17,7 @@ const {
 } = require('./auth')
 
 module.exports = {
+  assertNoClientActorUid,
   readActorAuthorization,
   readActorProfile,
   readAuthoritativeClaims,

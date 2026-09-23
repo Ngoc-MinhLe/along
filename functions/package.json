@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "main": "src/index.js",
   "scripts": {
-    "check": "node --check src/admin.js && node --check src/auth.js && node --check src/authorization.js && node --check src/health.js && node --check src/role-id.js && node --check src/custom-role-service.js && node --check src/custom-role-functions.js && node --check src/index.js",
+    "check": "node --check src/admin.js && node --check src/auth.js && node --check src/authorization.js && node --check src/health.js && node --check src/role-id.js && node --check src/custom-role-service.js && node --check src/custom-role-functions.js && node --check src/news-service.js && node --check src/news-functions.js && node --check src/index.js",
     "test": "node test/auth-boundary.test.js"
   },
   "engines": {

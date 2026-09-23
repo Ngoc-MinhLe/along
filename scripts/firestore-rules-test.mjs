@@ -191,6 +191,14 @@ try {
   await deny('6B.9 ROOT browser cannot update authorization', updateDoc(doc(rootDb, 'userAuthorizations', USER_UID), { permissions: PERMISSION_VALUES, updatedAt: Timestamp.now() }))
   await deny('6B.10 ROOT browser cannot delete authorization', deleteDoc(doc(rootDb, 'userAuthorizations', USER_UID)))
 
+  // Phase 8.1 News data is read through trusted callables. There is no direct
+  // client read/write path for News articles, ACLs or entitlements.
+  await deny('8.1 guest cannot directly read News article', getDoc(doc(guestDb, 'newsArticles', 'PUBLIC_ARTICLE')))
+  await deny('8.1 user cannot directly read News article', getDoc(doc(userDb, 'newsArticles', 'PUBLIC_ARTICLE')))
+  await deny('8.1 client cannot create News article', setDoc(doc(rootDb, 'newsArticles', 'CLIENT_WRITE'), { status: 'published' }))
+  await deny('8.1 client cannot write News ACL', setDoc(doc(rootDb, 'newsArticles', 'PUBLIC_ARTICLE', 'acl', 'CLIENT_WRITE'), { effect: 'ALLOW' }))
+  await deny('8.1 client cannot write News entitlement', setDoc(doc(rootDb, 'contentEntitlements', USER_UID), { newsLevel: 3, status: 'active' }))
+
   results.forEach((result) => console.log(result))
   console.log(`Firestore Rules security audit PASS (${results.length} assertions).`)
 } finally {
