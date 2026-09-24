@@ -1,6 +1,7 @@
 const { authHealth } = require('./health')
 const customRoleFunctions = require('./custom-role-functions')
 const newsFunctions = require('./news-functions')
+const systemRoleFunctions = require('./system-role-functions')
 
 exports.authHealth = authHealth
 exports.createCustomRole = customRoleFunctions.createCustomRole
@@ -10,6 +11,7 @@ exports.enableCustomRole = customRoleFunctions.enableCustomRole
 exports.deleteCustomRole = customRoleFunctions.deleteCustomRole
 exports.assignCustomRole = customRoleFunctions.assignCustomRole
 exports.revokeCustomRole = customRoleFunctions.revokeCustomRole
+exports.setSystemRole = systemRoleFunctions.setSystemRole
 exports.listNews = newsFunctions.listNews
 exports.getNewsArticle = newsFunctions.getNewsArticle
 exports.createNewsArticle = newsFunctions.createNewsArticle

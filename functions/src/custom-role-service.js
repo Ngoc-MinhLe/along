@@ -469,6 +469,10 @@ async function invokeTrusted(request, handler) {
 }
 
 module.exports = {
+  buildAuthorizationData,
+  planAuthorization,
+  readProfile,
+  readUserAuthorization,
   createCustomRole,
   updateCustomRole,
   disableCustomRole: (actor, data, db) => setCustomRoleStatus(actor, data, 'disabled', 'disableCustomRole', db),

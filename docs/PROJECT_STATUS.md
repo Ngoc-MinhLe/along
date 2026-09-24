@@ -14,15 +14,15 @@ Last reviewed: 2026-09-24
 - Repository: `https://github.com/Ngoc-MinhLe/along.git`.
 - Deployment configuration: Vite builds to `dist`; `vercel.json` rewrites SPA routes to `index.html`.
 - Package manager: npm.
-- Current state: Phase 8.5B pre-push validation. News Functions and Firestore indexes are deployed; frontend Vercel deployment is pending push to `main`.
+- Current state: Phase 9.3 System Role production deployment completed; frontend Vercel deployment remains pending push to `main`.
 
 ## 2. Current Status
 
-Current Phase: Phase 8.5B — Final Pre-Push Validation
+Current Phase: Phase 9.3 — System Role Production Deployment & Real-World Smoke Test
 
 Status: IN PROGRESS — LOCAL VALIDATION COMPLETE; WAITING FOR MANUAL GIT PUSH
 
-- Local completed: Phases 1-7B and News Phases 8.1-8.5A have implementation and regression-test coverage; Phase 8.5B Firebase deployment is complete.
+- Local completed: Phases 1-7B, News Phases 8.1-8.5A, and System Role Phases 9.1-9.2A have implementation and regression-test coverage; Phase 9.3 System Role Function deployment is complete.
 - Production deployed: Module 1 frontend, Authentication/RBAC frontend, current Firestore Rules, Phase 6C Functions and Phase 7A Custom Role assignment are deployed according to the project rollout record.
 - Production deployed: News Functions and required Firestore indexes.
 - Frontend production deployment: pending push to `main`; Vercel is connected to the existing project and will deploy automatically after push.
@@ -234,6 +234,49 @@ Status: PARTIALLY COMPLETED — Firebase deployed; Vercel frontend pending push 
 - Mutation, lifecycle, VIP, SPECIAL and ACL production scenarios were not run because no cleanup-safe production fixture exists.
 - No production News documents were created or modified.
 - Vercel frontend deployment remains pending the user's manual Git push to `main`.
+
+### Phase 9.1 — ROOT System Role Management
+
+Status: COMPLETED.
+
+- Added trusted `setSystemRole` Callable Function for ROOT-only System Role mutation.
+- Assignable roles are limited to `USER`, `EDITOR`, `ADMIN` and `SUPER_ADMIN`; `ROOT_ADMIN` cannot be assigned.
+- Target ROOT protection, Auth disabled checks, payload allowlisting, consistency verification and rollback are enforced server-side.
+- Frontend calls the Callable Function and does not directly write `systemRole`.
+
+### Phase 9.2 — System Role Management Readiness
+
+Status: COMPLETED.
+
+- Source audit and local/emulator regression confirmed actor, ROOT lock, claim/profile/authorization consistency and privilege-escalation boundaries.
+- ADMIN and USER are denied access to `setSystemRole`; ROOT-only UI controls are preserved.
+
+### Phase 9.2A — Safe Local Emulator Browser Setup
+
+Status: COMPLETED.
+
+- Frontend Firebase Emulator Mode is opt-in through `VITE_USE_FIREBASE_EMULATOR=true`.
+- Auth, Firestore and Functions emulator endpoints are configurable and protected against duplicate HMR connections.
+- Production Firebase configuration remains the default when the flag is absent or false.
+
+### Phase 9.2B — Manual Browser Smoke Test
+
+Status: COMPLETED WITH LIMITATION.
+
+- Emulator services were started and local setup was verified.
+- Browser automation was unavailable; interactive ROOT → USER → ADMIN browser verification was not completed by the agent.
+- No production mutation, deployment or test data was created.
+
+### Phase 9.3 — System Role Production Deployment & Real-World Smoke Test
+
+Status: Firebase Function DEPLOYED; production browser smoke test PENDING MANUAL VERIFICATION.
+
+- Only `setSystemRole` was deployed to Firebase project `along-6e1ce`.
+- Deployment is Node.js 22, 2nd Gen, region `us-central1`, state `ACTIVE`.
+- Production callable URL: `https://us-central1-along-6e1ce.cloudfunctions.net/setSystemRole`.
+- No Firestore Rules, Vercel deployment or production user/data mutation was performed.
+- Frontend source is ready for the user's manual Git push; Vercel will deploy from `main`.
+- Production ROOT → USER → ADMIN smoke test is pending the user's manual browser verification after Vercel deployment.
 
 ## 4. Current Architecture
 
@@ -470,6 +513,7 @@ The Rules test uses the local emulator and does not mutate production Firebase d
 6. News has no production documents. Only read-only production smoke tests have been performed.
 7. Vercel frontend deployment is pending the user's manual push to `main`.
 8. News mutation/lifecycle/VIP/SPECIAL/ACL production smoke tests remain pending until a cleanup-safe fixture workflow is available.
+9. System Role production browser smoke test remains pending manual verification after the frontend is pushed and deployed.
 
 ## 14. Production Rollout — CURRENT RBAC SCOPE COMPLETE
 
@@ -479,11 +523,14 @@ The Rules test uses the local emulator and does not mutate production Firebase d
 - [x] Phase 7B Custom Role assignment production smoke test.
 - [x] Verify assignment persistence across USER logout/login.
 - [x] Verify ROOT_ADMIN protection.
-- [x] Current frontend deployed through Vercel.
+- [ ] Current frontend source deployed through Vercel (existing project is configured; pending manual push to `main`).
 - [x] Phase 8.5A News pre-deployment review.
 - [x] News callable Functions deployed to Firebase.
 - [x] News Firestore indexes deployed.
 - [ ] News frontend deployed to the existing Vercel project `lichvannien`.
+- [x] Phase 9.3 `setSystemRole` Firebase Function deployed to `along-6e1ce`.
+- [ ] Phase 9.3 frontend pushed to `main` and Vercel deployment verified.
+- [ ] Phase 9.3 production ROOT → USER → ADMIN browser smoke test.
 
 News backend deployment and read-only smoke checks are complete. The frontend will be deployed automatically by Vercel after the manual push to `main`.
 
@@ -501,6 +548,7 @@ Not implemented. Question bank, exam generation, practice mode, exam mode, resul
 
 ## 16. Future Phases
 
+- Phase 9.3 — System Role Production Deployment & Real-World Smoke Test (Function deployed; browser verification pending).
 - Phase 8.5 — News Production Deployment & Smoke Test (Firebase complete; Vercel pending push).
 - Phase 9 — Module 3: Quiz, practice and exam workflows.
 - Phase 10 — Approval and audit workflows.
@@ -510,8 +558,11 @@ Not implemented. Question bank, exam generation, practice mode, exam mode, resul
 These are roadmap proposals, not completed features.
 
 Roadmap alignment note: Phase 7A and Phase 7B are completed and production
-verified. Phase 8.1-8.5A are completed, and Phase 8.5B Firebase deployment is complete.
-The next operational step is manual Git push to `main`, followed by Vercel automatic frontend deployment.
+verified. Phase 8.1-8.5A are completed; Phase 8.5B Firebase deployment is complete
+while its Vercel frontend remains pending push. Phase 9.1-9.2A are completed, and
+Phase 9.3 `setSystemRole` Firebase Function deployment is complete. The next
+operational step is manual Git push to `main`, followed by Vercel automatic frontend
+deployment and manual production browser smoke testing.
 
 ## DO NOT BREAK
 
@@ -552,11 +603,11 @@ The next operational step is manual Git push to `main`, followed by Vercel autom
 
 ## NEXT ACTION
 
-Current status: Phase 8.5B — Firebase deployed; Vercel frontend pending push to `main`.
+Current status: Phase 9.3 — `setSystemRole` Firebase Function deployed; frontend Vercel deployment pending push to `main`.
 
-Next step: manually commit and push reviewed changes to `main`; Vercel will deploy the connected existing project.
+Next step: manually review, commit and push the source to `main`; Vercel will deploy the connected existing project, then perform the production browser smoke test.
 
-No production News data has been created. Read-only production smoke tests passed; mutation smoke tests remain pending.
+No production System Role mutation or test user was created. Production browser smoke test remains pending manual verification.
 
 ## Final Review Notes
 

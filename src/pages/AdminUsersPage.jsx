@@ -5,7 +5,7 @@ import { PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
 import { canManageUserRole, getEffectivePermissions, getSystemRole, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { ROLE_HIERARCHY, SYSTEM_ROLES } from '../services/rbac/roles'
 import { listCustomRoles, listUsers } from '../services/rbac/firestore'
-import { assignCustomRole, revokeCustomRole } from '../services/rbac/functions'
+import { assignCustomRole, revokeCustomRole, setSystemRole } from '../services/rbac/functions'
 
 const PAGE_SIZE = 25
 const STATUS_OPTIONS = ['active', 'suspended', 'deletion_requested', 'deleted']
@@ -17,6 +17,7 @@ const SORT_OPTIONS = [
   ['systemRole', 'System Role'],
 ]
 const GROUP_LABELS = Object.freeze({ users: 'Users', roles: 'Roles', calendar: 'Calendar', news: 'News', quiz: 'Quiz', approval: 'Approval', audit: 'Audit' })
+const ASSIGNABLE_SYSTEM_ROLES = Object.freeze(ROLE_HIERARCHY.filter((role) => role !== SYSTEM_ROLES.ROOT_ADMIN))
 
 function formatDate(value) {
   if (!value) return '—'
@@ -51,12 +52,14 @@ function permissionGroups(permissions) {
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth()
   const { actor, hasPermission } = usePermissions()
+  const canManageSystemRole = getSystemRole(actor) === SYSTEM_ROLES.ROOT_ADMIN
   const canAssign = hasPermission(PERMISSIONS.ROLES_ASSIGN)
   const canRevoke = hasPermission(PERMISSIONS.ROLES_REVOKE)
   const [users, setUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [roleToAssign, setRoleToAssign] = useState('')
+  const [systemRoleToSet, setSystemRoleToSet] = useState('')
   const [search, setSearch] = useState('')
   const [systemRoleFilter, setSystemRoleFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -122,6 +125,7 @@ export default function AdminUsersPage() {
   function selectUser(id) {
     setSelectedId(id)
     setRoleToAssign('')
+    setSystemRoleToSet('')
     setError('')
     setMessage('')
   }
@@ -160,9 +164,43 @@ export default function AdminUsersPage() {
     if (success) setRevokeTarget(null)
   }
 
+  async function mutateSystemRole(nextRole) {
+    if (!canManageSystemRole) {
+      setError('Chỉ ROOT_ADMIN mới có thể thay đổi System Role.')
+      return false
+    }
+    if (!selected || isProtectedTarget(selected, currentUser)) return false
+    if (!ASSIGNABLE_SYSTEM_ROLES.includes(nextRole)) {
+      setError('System Role được chọn không hợp lệ.')
+      return false
+    }
+    if (nextRole === getSystemRole(selected)) return false
+    const confirmed = window.confirm(
+      `Xác nhận đổi System Role của ${selected.email || selected.uid} từ ${getSystemRole(selected)} thành ${nextRole}?`,
+    )
+    if (!confirmed) return false
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      await setSystemRole(selected.id, nextRole)
+      await loadData()
+      setSystemRoleToSet('')
+      setMessage('Đã cập nhật System Role.')
+      return true
+    } catch (mutationError) {
+      setError(mutationError.code === 'permission-denied'
+        ? 'Bạn không có quyền thay đổi System Role của người dùng này.'
+        : mutationError.message)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return <section className="admin-users-page">
     <div className="admin-card admin-users-toolbar">
-      <div className="admin-section-heading"><div><h3>Người dùng</h3><p>Quản lý hồ sơ, Custom Role và Effective Permissions. System Role chỉ đọc.</p></div><span className="admin-readonly">{filteredUsers.length} users</span></div>
+      <div className="admin-section-heading"><div><h3>Người dùng</h3><p>Quản lý hồ sơ, Custom Role và Effective Permissions theo quyền được cấp.</p></div><span className="admin-readonly">{filteredUsers.length} users</span></div>
       <div className="user-list-filters">
         <input value={search} onChange={(event) => updateFilter(setSearch, event.target.value)} placeholder="Tìm kiếm người dùng..." aria-label="Tìm kiếm người dùng" />
         <select value={systemRoleFilter} onChange={(event) => updateFilter(setSystemRoleFilter, event.target.value)} aria-label="Lọc System Role"><option value="">System Role: Tất cả</option>{[...ROLE_HIERARCHY].reverse().map((role) => <option key={role} value={role}>{role}</option>)}</select>
@@ -182,7 +220,7 @@ export default function AdminUsersPage() {
       </>}
     </div>
 
-    {selected && <UserDrawer user={selected} roleMap={roleMap} activeRoles={availableRoles} roleToAssign={roleToAssign} setRoleToAssign={setRoleToAssign} currentUser={currentUser} busy={busy} canAssign={canAssign} canRevoke={canRevoke} onClose={() => setSelectedId('')} onAssign={() => { mutateCustomRole('assign', roleToAssign); setRoleToAssign('') }} onRevoke={(roleId) => setRevokeTarget({ user: selected, roleId })} />}
+    {selected && <UserDrawer user={selected} roleMap={roleMap} activeRoles={availableRoles} roleToAssign={roleToAssign} setRoleToAssign={setRoleToAssign} systemRoleToSet={systemRoleToSet} setSystemRoleToSet={setSystemRoleToSet} assignableSystemRoles={ASSIGNABLE_SYSTEM_ROLES} currentUser={currentUser} busy={busy} canAssign={canAssign} canRevoke={canRevoke} canManageSystemRole={canManageSystemRole} onClose={() => setSelectedId('')} onAssign={() => { mutateCustomRole('assign', roleToAssign); setRoleToAssign('') }} onSystemRoleChange={mutateSystemRole} onRevoke={(roleId) => setRevokeTarget({ user: selected, roleId })} />}
     {revokeTarget && <RevokeModal target={revokeTarget} roleMap={roleMap} busy={busy} onCancel={() => setRevokeTarget(null)} onConfirm={confirmRevoke} />}
   </section>
 }
@@ -200,7 +238,7 @@ function UserRow({ user, roleMap, onSelect }) {
   </tr>
 }
 
-function UserDrawer({ user, roleMap, activeRoles, roleToAssign, setRoleToAssign, currentUser, busy, canAssign, canRevoke, onClose, onAssign, onRevoke }) {
+function UserDrawer({ user, roleMap, activeRoles, roleToAssign, setRoleToAssign, systemRoleToSet, setSystemRoleToSet, assignableSystemRoles, currentUser, busy, canAssign, canRevoke, canManageSystemRole, onClose, onAssign, onSystemRoleChange, onRevoke }) {
   const systemRole = getSystemRole(user)
   const trustedRoleManagement = false
   const rootTarget = isRootUser(user)
@@ -212,7 +250,7 @@ function UserDrawer({ user, roleMap, activeRoles, roleToAssign, setRoleToAssign,
     <aside className="user-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="user-detail-title">
       <div className="drawer-header"><div><h3 id="user-detail-title">Chi tiết người dùng</h3><p>{user.email || user.uid}</p></div><button type="button" className="drawer-close-button" onClick={onClose} aria-label="Đóng">×</button></div>
       <section className="drawer-section"><h4>Thông tin người dùng</h4><div className="drawer-profile-heading">{user.photoURL ? <img src={user.photoURL} alt="" /> : <span className="user-avatar-fallback large">{initials(user)}</span>}<div><strong>{user.displayName || 'Chưa có tên'}</strong><small>{user.email || '—'}</small></div></div><dl className="user-detail-meta"><div><dt>UID</dt><dd>{user.uid || user.id}</dd></div><div><dt>Status</dt><dd>{user.status || 'active'}</dd></div><div><dt>Created At</dt><dd>{formatDate(user.createdAt)}</dd></div><div><dt>Last Login</dt><dd>{formatDate(user.lastLoginAt)}</dd></div></dl></section>
-      <section className="drawer-section"><h4>System Role</h4><div className={`drawer-system-role ${rootTarget ? 'root' : ''}`}><span className="system-role-badge">{systemRole}</span><strong>{rootTarget ? '🔒 ROOT PROTECTED' : 'READ ONLY'}</strong></div><p className="drawer-note">System Role và status không được chỉnh sửa trên browser.</p></section>
+      <section className="drawer-section"><h4>System Role</h4><div className={`drawer-system-role ${rootTarget ? 'root' : ''}`}><span className="system-role-badge">{systemRole}</span><strong>{rootTarget ? '🔒 ROOT PROTECTED' : canManageSystemRole && !protectedTarget ? 'ROOT ONLY' : 'READ ONLY'}</strong></div>{canManageSystemRole && !rootTarget && !protectedTarget && <div className="drawer-assign-row"><select value={systemRoleToSet || systemRole} onChange={(event) => setSystemRoleToSet(event.target.value)} disabled={busy} aria-label="System Role mới">{assignableSystemRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select><button type="button" className="admin-primary-button" onClick={() => onSystemRoleChange(systemRoleToSet || systemRole)} disabled={busy || !systemRoleToSet || systemRoleToSet === systemRole}>Cập nhật</button></div>}<p className="drawer-note">System Role và status chỉ được thay đổi qua trusted backend; client không ghi Firestore trực tiếp.</p></section>
       <section className="drawer-section"><h4>Custom Roles</h4><div className="drawer-assigned-roles">{assignedRoles.length ? assignedRoles.map(({ id, role }) => <div className="drawer-role-item" key={id}><div><strong>{roleLabel(role)}</strong><span className={role.status === 'disabled' ? 'disabled-text' : ''}>{role.status} · {(role.permissions || []).length} quyền</span></div>{canRevoke && <button type="button" onClick={() => onRevoke(id)} disabled={busy || protectedTarget}>Thu hồi</button>}</div>) : <p className="admin-muted">Chưa có Custom Role.</p>}</div>{canAssign && <div className="drawer-assign-row"><select value={roleToAssign} onChange={(event) => setRoleToAssign(event.target.value)} disabled={busy || protectedTarget}><option value="">Chọn Custom Role active</option>{activeRoles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.id})</option>)}</select><button type="button" className="admin-primary-button" onClick={onAssign} disabled={!roleToAssign || busy || protectedTarget}>+ Gán</button></div>}{!canAssign && !canRevoke && <p className="drawer-note">{trustedRoleManagement ? 'Gán/thu hồi role phải chạy qua trusted Admin SDK tool để đồng bộ authorization.' : 'Custom Roles chỉ đọc với tài khoản hiện tại.'}</p>}{protectedTarget && <p className="admin-warning">{rootTarget ? 'ROOT được bảo vệ, không thể quản lý Custom Role trên browser.' : 'Không thể tự thay đổi Custom Role của chính mình.'}</p>}</section>
       <section className="drawer-section"><h4>Effective Permissions <small>{effectivePermissions.length} quyền</small></h4>{effectivePermissions.length ? <div className="effective-permission-groups">{permissionGroups(effectivePermissions).map((group) => <div key={group.key}><strong>{group.label}</strong>{group.permissions.map((permission) => <div className="effective-permission-row" key={permission}><span>{permission}</span><div>{sourceMap[permission]?.system && <em className="permission-source system">SYSTEM</em>}{sourceMap[permission]?.custom?.map((roleId) => <em className="permission-source custom" key={roleId}>CUSTOM · {roleMap[roleId]?.id || roleId}</em>)}</div></div>)}</div>)}</div> : <p className="admin-muted">Không có quyền hiệu lực.</p>}</section>
     </aside>

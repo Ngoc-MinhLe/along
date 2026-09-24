@@ -54,3 +54,7 @@ export function assignCustomRole(targetUid, roleId) {
 export function revokeCustomRole(targetUid, roleId) {
   return callFunction('revokeCustomRole', { targetUid, customRoleId: roleId })
 }
+
+export function setSystemRole(targetUid, targetSystemRole) {
+  return callFunction('setSystemRole', { targetUid, targetSystemRole })
+}
