@@ -9,6 +9,7 @@ const {
 const ACCESS_MODES = Object.freeze({ PUBLIC: 'PUBLIC', VIP: 'VIP', SPECIAL: 'SPECIAL' })
 const MAX_LIST_LIMIT = 50
 const MAX_SCAN_LIMIT = 100
+const MAX_SELECTOR_LIMIT = 50
 
 function invalidArgument(message) {
   throw new HttpsError('invalid-argument', message)
@@ -44,6 +45,25 @@ function normalizeListPayload(data) {
     invalidArgument(`limit must be an integer from 1 to ${MAX_LIST_LIMIT}.`)
   }
   return { categoryId: categoryId?.trim() || null, limit }
+}
+
+function normalizeSelectorPayload(data, allowedKeys = []) {
+  assertAllowedKeys(data || {}, ['query', 'limit', ...allowedKeys])
+  const query = data?.query
+  if (query !== undefined && (typeof query !== 'string' || query.length > 120)) {
+    invalidArgument('query must be a string with at most 120 characters.')
+  }
+  const limit = data?.limit === undefined ? 20 : data.limit
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SELECTOR_LIMIT) {
+    invalidArgument(`limit must be an integer from 1 to ${MAX_SELECTOR_LIMIT}.`)
+  }
+  return { query: query?.trim() || '', limit }
+}
+
+function requireAnyPermission(actor, permissions) {
+  if (!actor || !permissions.some((permission) => hasPermission(actor, permission))) {
+    throw new HttpsError('permission-denied', 'The actor does not have a News management permission.')
+  }
 }
 
 function normalizeArticleId(data) {
@@ -224,6 +244,127 @@ async function getNewsArticle(actor, data, db = adminDb) {
   return { ok: true, article }
 }
 
+function managementArticleData(snapshot, articleId, { includeContent = false } = {}) {
+  if (!snapshot.exists) notFound()
+  const data = snapshot.data()
+  if (!data || data.id !== articleId || !['draft', 'published'].includes(data.status)) {
+    throw new HttpsError('failed-precondition', 'The News article is invalid.')
+  }
+  const policy = normalizeAccessPolicy(data.accessPolicy)
+  if (!policy && data.accessPolicy?.mode !== 'INHERIT') {
+    throw new HttpsError('failed-precondition', 'The News article access policy is invalid.')
+  }
+  const result = {
+    id: articleId,
+    title: typeof data.title === 'string' ? data.title : '',
+    slug: typeof data.slug === 'string' ? data.slug : '',
+    excerpt: typeof data.excerpt === 'string' ? data.excerpt : '',
+    categoryId: typeof data.categoryId === 'string' ? data.categoryId : null,
+    status: data.status,
+    accessPolicy: data.accessPolicy || null,
+    updatedAt: toIso(data.updatedAt),
+    publishedAt: toIso(data.publishedAt),
+  }
+  if (includeContent) {
+    result.content = typeof data.content === 'string' ? data.content : ''
+    result.contentFormat = typeof data.contentFormat === 'string' ? data.contentFormat : 'PLAIN_TEXT'
+  }
+  return result
+}
+
+async function listNewsManagement(actor, data, db = adminDb) {
+  requireAnyPermission(actor, ['news.read', 'news.create', 'news.update', 'news.delete', 'news.publish'])
+  const payload = normalizeSelectorPayload(data)
+  const queryText = payload.query.toLowerCase()
+  let query = db.collection('newsArticles')
+  if (payload.query) {
+    query = query.orderBy('title').startAt(payload.query).endAt(`${payload.query}\uf8ff`)
+  } else {
+    query = query.orderBy('updatedAt', 'desc')
+  }
+  const snapshot = await query.limit(payload.limit).get()
+  const items = snapshot.docs
+    .map((item) => managementArticleData(item, item.id))
+    .filter((item) => {
+      const searchable = `${item.title} ${item.slug}`.toLowerCase()
+      return !queryText || searchable.includes(queryText)
+    })
+  return { ok: true, items }
+}
+
+async function getNewsManagementArticle(actor, data, db = adminDb) {
+  requireAnyPermission(actor, ['news.read', 'news.create', 'news.update', 'news.delete', 'news.publish'])
+  const articleId = normalizeArticleId(data)
+  const snapshot = await db.doc(`newsArticles/${articleId}`).get()
+  return { ok: true, article: managementArticleData(snapshot, articleId, { includeContent: true }) }
+}
+
+async function listNewsCategories(actor, data, db = adminDb) {
+  const payload = normalizeSelectorPayload(data, ['includeDisabled'])
+  const includeDisabled = data?.includeDisabled === true
+  if (includeDisabled) requireAnyPermission(actor, ['news.create', 'news.update', 'news.delete'])
+  const queryText = payload.query.toLowerCase()
+  let query = db.collection('newsCategories')
+  if (payload.query) {
+    query = query.orderBy('name').startAt(payload.query).endAt(`${payload.query}\uf8ff`)
+  } else {
+    query = query.orderBy('name')
+  }
+  const snapshot = await query.limit(payload.limit).get()
+  const items = snapshot.docs
+    .map((item) => {
+      const data = item.data()
+      return {
+        id: item.id,
+        name: typeof data.name === 'string' ? data.name : '',
+        description: typeof data.description === 'string' ? data.description : '',
+        status: data.status,
+        defaultAccessPolicy: data.defaultAccessPolicy || null,
+      }
+    })
+    .filter((item) => (includeDisabled || item.status === 'active')
+      && (!queryText || `${item.name} ${item.description}`.toLowerCase().includes(queryText)))
+  return { ok: true, items }
+}
+
+async function listNewsUsers(actor, data, db = adminDb) {
+  requireAnyPermission(actor, ['news.update'])
+  const payload = normalizeSelectorPayload(data)
+  let query = db.collection('users').orderBy('displayName')
+  if (payload.query) query = query.startAt(payload.query).endAt(`${payload.query}\uf8ff`)
+  const snapshot = await query.limit(payload.limit).get()
+  const queryText = payload.query.toLowerCase()
+  const items = snapshot.docs.map((item) => {
+    const data = item.data()
+    return {
+      id: item.id,
+      uid: data.uid === item.id ? item.id : null,
+      email: typeof data.email === 'string' ? data.email : '',
+      displayName: typeof data.displayName === 'string' ? data.displayName : '',
+      status: data.status || 'active',
+    }
+  }).filter((item) => item.uid && item.status === 'active'
+    && (!queryText || `${item.displayName} ${item.email}`.toLowerCase().includes(queryText)))
+  return { ok: true, items }
+}
+
+async function listNewsGroups(actor, data, db = adminDb) {
+  requireAnyPermission(actor, ['news.update'])
+  const payload = normalizeSelectorPayload(data)
+  const snapshot = await db.collection('newsGroups').limit(payload.limit).get()
+  const queryText = payload.query.toLowerCase()
+  const items = snapshot.docs.map((item) => {
+    const data = item.data()
+    return {
+      id: item.id,
+      name: typeof data.name === 'string' ? data.name : item.id,
+      status: data.status,
+    }
+  }).filter((item) => item.status === 'active'
+    && (!queryText || item.name.toLowerCase().includes(queryText) || item.id.toLowerCase().includes(queryText)))
+  return { ok: true, items }
+}
+
 async function invokeNews(request, handler) {
   const actor = await getOptionalTrustedActor(request)
   try {
@@ -240,5 +381,10 @@ module.exports = {
   canReadArticle,
   listNews,
   getNewsArticle,
+  listNewsManagement,
+  getNewsManagementArticle,
+  listNewsCategories,
+  listNewsUsers,
+  listNewsGroups,
   invokeNews,
 }

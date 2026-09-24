@@ -135,7 +135,43 @@
 .admin-warning { margin-top: 10px !important; }
 @media (max-width: 900px) { .user-list-filters { grid-template-columns: repeat(3, 1fr); }.user-list-filters input { grid-column: span 3; } }
 @media (max-width: 560px) { .user-list-filters { grid-template-columns: 1fr 1fr; }.user-list-filters input { grid-column: span 2; }.user-pagination { display: grid; }.user-detail-drawer { padding: 18px; }.drawer-assign-row { display: grid; }.drawer-assign-row button { width: 100%; } }
+.drawer-system-role > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.drawer-system-role > p { margin-top: 8px !important; color: #57746c !important; font-size: 11px !important; }
+.drawer-system-role > b { display: block; margin-top: 7px; color: #87651f; font-size: 10px; }
+.drawer-role-item small { display: block; margin-top: 4px; color: #829690; font-size: 10px; }
+.profile-edit-form { display: grid; gap: 7px; margin-top: 14px; padding: 12px; border: 1px solid #dce8e2; border-radius: 8px; background: #fbfdfc; }
+.profile-edit-form label { display: grid; gap: 4px; color: #57746c; font-size: 10px; font-weight: 600; }
+.profile-edit-form input { padding: 8px; border: 1px solid #cadbd4; border-radius: 6px; color: #315a52; background: #fff; font: inherit; font-size: 11px; }
+.profile-edit-form button { justify-self: start; }.profile-edit-form small { color: #829690; font-size: 9px; }
+.permission-explanation-list { display: grid; gap: 7px; }
+.permission-explanation-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid #e5efeb; }
+.permission-explanation-row > div:first-child { min-width: 0; }
+.permission-explanation-row strong, .permission-explanation-row code, .permission-explanation-row p { display: block; }
+.permission-explanation-row strong { color: #315a52; font-size: 10px; }
+.permission-explanation-row code { margin-top: 2px; color: #829690; font-size: 9px; }
+.permission-explanation-row p { margin-top: 3px !important; color: #718680 !important; font-size: 10px !important; }
+.permission-explanation-row.blocked { background: #fff8e8; }
+.permission-explanation-badges { display: flex; flex-wrap: wrap; justify-content: end; align-content: start; gap: 4px; min-width: 105px; }
+.permission-risk, .permission-delegable, .permission-not-delegable { display: inline-block; height: fit-content; padding: 3px 5px; border-radius: 9px; font-size: 8px; font-style: normal; font-weight: 700; }
+.permission-risk.low { color: #287b5a; background: #e7f5eb; }.permission-risk.medium { color: #6d6a36; background: #f4f0cd; }.permission-risk.high, .permission-risk.critical { color: #a44d46; background: #fff0ed; }.permission-risk.unknown { color: #718680; background: #edf2ef; }
+.permission-delegable { color: #287b5a; background: #e7f5eb; }.permission-not-delegable { color: #87651f; background: #fff1c9; }
+.assignment-preview { margin-top: 12px; padding: 12px; border: 1px solid #dce8e2; border-radius: 8px; background: #fbfdfc; }
+.assignment-preview h5 { margin: 0 0 7px; color: #315a52; font-size: 11px; }.assignment-preview h5:not(:first-child) { margin-top: 14px; }.assignment-preview > p { margin-bottom: 8px !important; font-size: 11px !important; }
+.delegation-preview-list { display: grid; gap: 5px; margin-top: 8px; }.delegation-preview-row { padding: 6px 8px; border-radius: 6px; color: #287b5a; background: #edf8f1; font-size: 10px; }.delegation-preview-row.blocked { color: #87651f; background: #fff8e8; }.delegation-preview-row span, .delegation-preview-row small { display: block; margin: 0; }.delegation-preview-row small { margin-top: 3px; color: inherit; font-size: 9px; }
+.role-delegation-notice { display: grid; gap: 5px; margin-top: 15px; padding: 12px; border-radius: 8px; }.role-delegation-notice.allowed { background: #edf8f1; }.role-delegation-notice.blocked { background: #fff8e8; }.role-delegation-notice strong { color: #315a52; font-size: 11px; }.role-delegation-notice p { font-size: 11px !important; }.role-delegation-notice div { padding-top: 5px; border-top: 1px solid rgba(49, 90, 82, .12); }.role-delegation-notice div span, .role-delegation-notice div small { display: block; margin: 0; font-size: 10px; }.role-delegation-notice div small { margin-top: 2px; color: #718680; font-size: 9px; }
+.role-permission-groups section span code { display: block; margin-top: 2px; color: #829690; font-size: 8px; }.role-permission-groups section span small { display: block; margin-top: 3px; color: #718680; font-size: 9px; font-weight: 400; }
+.permission-groups label span code, .permission-groups label span small { display: block; margin-top: 2px; color: #718680; font-size: 9px; font-weight: 400; }
+@media (max-width: 560px) { .permission-explanation-row { display: grid; }.permission-explanation-badges { justify-content: start; min-width: 0; } }
 .access-denied { margin: 20px 0; padding: 22px; border: 1px solid #ead8aa; border-radius: 10px; color: #765f32; background: #fffaf0; }
 .access-denied h3 { margin: 0 0 8px; color: #765f32; }
 .access-denied p { margin: 0; line-height: 1.6; }
 .access-denied code { font-size: 11px; }
+.resource-selector { display: grid; gap: 5px; min-width: 0; }
+.resource-selector > label { display: grid; gap: 4px; color: #57746c; font-size: 10px; font-weight: 600; }
+.resource-selector input, .resource-selector select { min-width: 0; padding: 8px; border: 1px solid #cadbd4; border-radius: 6px; color: #315a52; background: #fff; font: inherit; font-size: 11px; }
+.resource-selector-empty { color: #a44d46; font-size: 10px; }
+.resource-selector-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 7px 8px; border: 1px solid #dce8e2; border-radius: 6px; background: #f4f8f6; }
+.resource-selector-preview strong { color: #315a52; font-size: 10px; }
+.resource-selector-preview small { color: #829690; font-size: 9px; }
+.resource-selector-preview button { margin-left: auto; border: 0; color: #a44d46; background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
+.resource-selector-preview button:disabled { cursor: not-allowed; opacity: .5; }

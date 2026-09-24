@@ -1,27 +1,17 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '../auth/PermissionContext'
-import { PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
-import { CUSTOM_ROLE_FORBIDDEN_PERMISSIONS, ROLE_PERMISSIONS } from '../services/rbac/policy'
-import { ROLE_HIERARCHY } from '../services/rbac/roles'
+import { getPermissionMetadata, PERMISSION_GROUP_LABELS, PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
+import { CUSTOM_ROLE_FORBIDDEN_PERMISSIONS, getRoleDelegationPreview, ROLE_PERMISSIONS } from '../services/rbac/policy'
+import { getSystemRoleMetadata, ROLE_HIERARCHY } from '../services/rbac/roles'
 import { listCustomRoles, listUsers } from '../services/rbac/firestore'
 import { createCustomRole, deleteCustomRole, disableCustomRole, enableCustomRole, updateCustomRole } from '../services/rbac/functions'
 import { generateRoleId } from '../services/rbac/roleId'
-
-const GROUP_LABELS = Object.freeze({
-  users: 'Users',
-  roles: 'Roles',
-  calendar: 'Calendar',
-  news: 'News',
-  quiz: 'Quiz',
-  approval: 'Approval',
-  audit: 'Audit',
-})
 
 const PERMISSION_GROUPS = Object.freeze(PERMISSION_VALUES.reduce((groups, permission) => {
   const key = permission.split('.')[0]
   let group = groups.find((item) => item.key === key)
   if (!group) {
-    group = { key, label: GROUP_LABELS[key] || key.charAt(0).toUpperCase() + key.slice(1), permissions: [] }
+    group = { key, label: PERMISSION_GROUP_LABELS[key] || key.charAt(0).toUpperCase() + key.slice(1), permissions: [] }
     groups.push(group)
   }
   group.permissions.push(permission)
@@ -38,7 +28,7 @@ function formatDate(value) {
 }
 
 export default function AdminRolesPage() {
-  const { hasPermission } = usePermissions()
+  const { actor, hasPermission } = usePermissions()
   const canReadUsers = hasPermission(PERMISSIONS.USERS_READ)
   const canCreate = hasPermission(PERMISSIONS.ROLES_CREATE)
   const canUpdate = hasPermission(PERMISSIONS.ROLES_UPDATE)
@@ -55,6 +45,7 @@ export default function AdminRolesPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const roleMap = useMemo(() => Object.fromEntries(roles.map((role) => [role.id, role])), [roles])
 
   async function loadData() {
     setLoading(true)
@@ -190,8 +181,8 @@ export default function AdminRolesPage() {
       <div className="system-role-hierarchy">
         {SYSTEM_ROLE_ORDER.map((role, index) => <Fragment key={role}>
           <details className="system-role-card">
-            <summary><div><strong>{role}</strong><small>Cấp {ROLE_HIERARCHY.indexOf(role) + 1}{index === 0 ? ' · Cao nhất' : ''}</small></div><div><span>{ROLE_PERMISSIONS[role]?.length || 0} quyền</span><small>System Role · Read only</small></div></summary>
-            <PermissionCatalogView assignedPermissions={ROLE_PERMISSIONS[role] || []} showAll />
+            <summary><div><strong>{role}</strong><small>{getSystemRoleMetadata(role).name} · Cấp {ROLE_HIERARCHY.indexOf(role) + 1}{index === 0 ? ' · Cao nhất' : ''}</small><p>{getSystemRoleMetadata(role).description}</p></div><div><span>{ROLE_PERMISSIONS[role]?.length || 0} quyền</span><small>System Role · Read only</small></div></summary>
+            <PermissionCatalogView assignedPermissions={ROLE_PERMISSIONS[role] || []} showAll actor={actor} roleMap={roleMap} />
           </details>
           {index < SYSTEM_ROLE_ORDER.length - 1 && <div className="hierarchy-arrow" aria-hidden="true">↓</div>}
         </Fragment>)}
@@ -215,7 +206,7 @@ export default function AdminRolesPage() {
           </div>
           <div className="admin-row-actions"><button type="button" onClick={() => setViewingRoleId(isViewing ? '' : role.id)}>{isViewing ? 'Ẩn quyền' : 'Xem quyền'}</button>{canUpdate && <button type="button" onClick={() => openEdit(role)}>Sửa quyền</button>}{canDisable && <button type="button" onClick={() => changeStatus(role)} disabled={saving}>{role.status === 'active' ? 'Disable' : 'Enable'}</button>}{canDelete && <button type="button" onClick={() => requestDelete(role)} disabled={Boolean(assignedCount) || saving}>Xóa</button>}</div>
           {assignedCount > 0 && <p className="role-delete-note">Role đang được gán cho người dùng, không thể xóa.</p>}
-          {isViewing && <div className="custom-role-permission-view"><div><strong>{role.name}</strong><span>{(role.permissions || []).length} quyền</span></div><p>{role.description || 'Không có mô tả'}</p><PermissionCatalogView assignedPermissions={role.permissions || []} /></div>}
+          {isViewing && <div className="custom-role-permission-view"><div><strong>{role.name}</strong><span>{(role.permissions || []).length} quyền</span></div><p>{role.description || 'Không có mô tả'}</p><PermissionCatalogView assignedPermissions={role.permissions || []} actor={actor} roleMap={roleMap} /><RoleDelegationNotice actor={actor} role={role} roleMap={roleMap} /></div>}
         </article>
       })}{!roles.length && <p className="admin-muted">Chưa có Custom Role.</p>}</div>}
     </section>
@@ -224,18 +215,23 @@ export default function AdminRolesPage() {
   </div>
 }
 
-function PermissionCatalogView({ assignedPermissions, showAll = false }) {
+function PermissionCatalogView({ assignedPermissions, showAll = false, actor, roleMap = {} }) {
   const assigned = new Set(assignedPermissions)
   const invalidPermissions = assignedPermissions.filter((permission) => !PERMISSION_VALUES.includes(permission))
   return <div className="role-permission-groups">
     {PERMISSION_GROUPS.map((group) => {
       const visible = showAll ? group.permissions : group.permissions.filter((permission) => assigned.has(permission))
       return <section key={group.key}><strong>{group.label}</strong>{visible.length
-        ? <div>{visible.map((permission) => <span className={assigned.has(permission) ? 'permission-granted' : 'permission-missing'} key={permission}>{assigned.has(permission) ? '✓' : '×'} {permission}</span>)}</div>
+        ? <div>{visible.map((permission) => { const info = getPermissionMetadata(permission); return <span className={assigned.has(permission) ? 'permission-granted' : 'permission-missing'} key={permission}>{assigned.has(permission) ? '✓' : '×'} {info.name} <code>{permission}</code><small>{info.description}</small></span> })}</div>
         : <small>—</small>}</section>
     })}
     {invalidPermissions.length > 0 && <section className="invalid-permissions"><strong>Invalid · không có hiệu lực</strong><div>{invalidPermissions.map((permission) => <span key={permission}>× {permission}</span>)}</div></section>}
   </div>
+}
+
+function RoleDelegationNotice({ actor, role, roleMap }) {
+  const preview = getRoleDelegationPreview(actor, role, roleMap)
+  return <div className={`role-delegation-notice ${preview.canDelegate ? 'allowed' : 'blocked'}`}><strong>{preview.canDelegate ? 'Có thể phân tiếp theo policy hiện tại' : 'Không thể phân tiếp role này'}</strong>{preview.canDelegate ? <p>Actor có thể delegate toàn bộ permission hợp lệ của role này trong scope hiện tại.</p> : <p>{preview.reason || 'Role chứa permission ngoài delegation scope của actor.'}</p>}{preview.permissionDetails.map((permission) => <div key={permission.key}><span>{permission.allowed ? '✓' : '×'} {permission.name}</span><small>{permission.key} · {permission.allowed ? 'Trong delegation scope' : permission.reason}</small></div>)}</div>
 }
 
 function RoleForm({ form, editing, saving, onChange, onTogglePermission, onSubmit, onCancel }) {
@@ -243,7 +239,7 @@ function RoleForm({ form, editing, saving, onChange, onTogglePermission, onSubmi
   return <form className="admin-role-form" onSubmit={onSubmit}>
     <div className="admin-form-grid"><label>Tên role<input value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} required /></label><div className="generated-role-id"><span>Role ID kỹ thuật</span><code>{editing ? form.id : generatedId}</code><small>{editing ? 'Role ID không thể thay đổi.' : 'Được tự sinh từ tên và chống trùng khi lưu.'}</small></div></div>
     <label>Mô tả<textarea value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} rows="3" /></label>
-    <fieldset><legend>Permissions</legend><p className="permission-help">Permission catalog cố định. Các quyền policy protected được hiển thị nhưng không thể chọn.</p><div className="permission-groups">{PERMISSION_GROUPS.map((group) => <div key={group.key}><strong>{group.label}</strong>{group.permissions.map((permission) => { const protectedPermission = CUSTOM_ROLE_FORBIDDEN_PERMISSIONS.includes(permission); return <label key={permission} className={protectedPermission ? 'permission-disabled' : ''}><input type="checkbox" checked={form.permissions.includes(permission)} disabled={protectedPermission} onChange={() => onTogglePermission(permission)} /><span>{permission}</span>{protectedPermission && <small>policy protected</small>}</label> })}</div>)}</div></fieldset>
+    <fieldset><legend>Permissions</legend><p className="permission-help">Permission catalog cố định. Các quyền policy protected được hiển thị nhưng không thể chọn.</p><div className="permission-groups">{PERMISSION_GROUPS.map((group) => <div key={group.key}><strong>{group.label}</strong>{group.permissions.map((permission) => { const protectedPermission = CUSTOM_ROLE_FORBIDDEN_PERMISSIONS.includes(permission); const info = getPermissionMetadata(permission); return <label key={permission} className={protectedPermission ? 'permission-disabled' : ''}><input type="checkbox" checked={form.permissions.includes(permission)} disabled={protectedPermission} onChange={() => onTogglePermission(permission)} /><span>{info.name} <code>{permission}</code><small>{info.description}</small></span>{protectedPermission && <small>policy protected</small>}</label> })}</div>)}</div></fieldset>
     <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo role'}</button><button className="admin-secondary-button" type="button" onClick={onCancel} disabled={saving}>Hủy</button></div>
   </form>
 }

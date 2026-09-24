@@ -1,49 +1,16 @@
 const { HttpsError } = require('firebase-functions/v2/https')
 const { adminAuth, adminDb } = require('./admin')
-
-const SYSTEM_ROLES = Object.freeze({
-  USER: 'USER',
-  EDITOR: 'EDITOR',
-  ADMIN: 'ADMIN',
-  SUPER_ADMIN: 'SUPER_ADMIN',
-  ROOT_ADMIN: 'ROOT_ADMIN',
-})
-
-const SYSTEM_ROLE_SET = new Set(Object.values(SYSTEM_ROLES))
-const PERMISSIONS = Object.freeze([
-  'users.read',
-  'users.create',
-  'users.update',
-  'users.delete',
-  'roles.read',
-  'roles.create',
-  'roles.update',
-  'roles.disable',
-  'roles.delete',
-  'roles.assign',
-  'roles.revoke',
-  'calendar.search',
-  'calendar.export',
-  'calendar.import',
-  'news.read',
-  'news.create',
-  'news.update',
-  'news.delete',
-  'news.publish',
-  'quiz.question.read',
-  'quiz.question.create',
-  'quiz.question.update',
-  'quiz.question.delete',
-  'quiz.exam.create',
-  'quiz.exam.update',
-  'quiz.exam.publish',
-  'quiz.exam.delete',
-  'approval.create',
-  'approval.review',
-  'audit.read',
-])
-
-const PERMISSION_SET = new Set(PERMISSIONS)
+const {
+  SYSTEM_ROLES,
+  SYSTEM_ROLE_SET,
+  PERMISSIONS,
+  PERMISSION_SET,
+  DELEGATION_ACTIONS,
+  isSystemRole,
+  isKnownPermission,
+  isValidCustomRolePermission,
+  isDelegationWithinScope,
+} = require('./policy')
 
 function failAuthorization(message) {
   throw new HttpsError('permission-denied', message)
@@ -51,14 +18,6 @@ function failAuthorization(message) {
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-function isSystemRole(value) {
-  return typeof value === 'string' && SYSTEM_ROLE_SET.has(value)
-}
-
-function isKnownPermission(value) {
-  return typeof value === 'string' && PERMISSION_SET.has(value)
 }
 
 function uniqueStringList(value) {
@@ -201,16 +160,32 @@ function requireSystemRole(actor, role) {
 }
 
 function canManageCustomRole(actor, role, action) {
-  if (!role || role.type !== 'CUSTOM' || typeof action !== 'string') return false
+  if (!role
+    || role.type !== 'CUSTOM'
+    || typeof action !== 'string'
+    || !Array.isArray(role.permissions)
+    || !role.permissions.every(isValidCustomRolePermission)) return false
   if (hasSystemRole(actor, 'ROOT_ADMIN')) return true
   return hasPermission(actor, `roles.${action}`)
     && Array.isArray(role.permissions)
-    && role.permissions.every((permission) => hasPermission(actor, permission))
+    && isDelegationWithinScope(actor.authorization.permissions, role.permissions)
+}
+
+function canDelegateCustomRole(actor, role, action = 'assign') {
+  if (!DELEGATION_ACTIONS.includes(action)) return false
+  return canManageCustomRole(actor, role, action)
 }
 
 function requireCanManageCustomRole(actor, role, action) {
   if (!canManageCustomRole(actor, role, action)) {
     throw new HttpsError('permission-denied', `The actor cannot perform roles.${action} for this Custom Role.`)
+  }
+  return true
+}
+
+function requireCanDelegateCustomRole(actor, role, action = 'assign') {
+  if (!canDelegateCustomRole(actor, role, action)) {
+    throw new HttpsError('permission-denied', `The actor cannot delegate this Custom Role with roles.${action}.`)
   }
   return true
 }
@@ -279,6 +254,8 @@ module.exports = {
   requireSystemRole,
   canManageCustomRole,
   requireCanManageCustomRole,
+  canDelegateCustomRole,
+  requireCanDelegateCustomRole,
   isRootActor,
   requireRootActor,
   SYSTEM_ROLES,

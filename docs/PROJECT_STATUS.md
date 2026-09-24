@@ -14,19 +14,22 @@ Last reviewed: 2026-09-24
 - Repository: `https://github.com/Ngoc-MinhLe/along.git`.
 - Deployment configuration: Vite builds to `dist`; `vercel.json` rewrites SPA routes to `index.html`.
 - Package manager: npm.
-- Current state: Phase 9.3 System Role production deployment completed; frontend Vercel deployment remains pending push to `main`.
+- Current state: Phase 10.5 Audit & Security Event Foundation is COMPLETED locally; Phase 10.6 News Entitlement / Group / Subscription Foundation is the next proposed phase.
 
 ## 2. Current Status
 
-Current Phase: Phase 9.3 — System Role Production Deployment & Real-World Smoke Test
+Authoritative current phase: **Phase 10.5 — Audit & Security Event Foundation — COMPLETED locally**.
+Next proposed phase: **Phase 10.6 — News Entitlement / Group / Subscription Foundation**.
 
-Status: IN PROGRESS — LOCAL VALIDATION COMPLETE; WAITING FOR MANUAL GIT PUSH
+Current Phase: Phase 10.5 — Audit & Security Event Foundation
 
-- Local completed: Phases 1-7B, News Phases 8.1-8.5A, and System Role Phases 9.1-9.2A have implementation and regression-test coverage; Phase 9.3 System Role Function deployment is complete.
+Status: COMPLETED — sanitized trusted audit events, regression tests and build PASS; no production deployment
+
+- Local completed: Phases 1-7B, News Phases 8.1-8.5A, System Role Phases 9.1-9.3, and Phase 10.1 through 10.5 foundations with Rules and regression verification.
 - Production deployed: Module 1 frontend, Authentication/RBAC frontend, current Firestore Rules, Phase 6C Functions and Phase 7A Custom Role assignment are deployed according to the project rollout record.
 - Production deployed: News Functions and required Firestore indexes.
 - Frontend production deployment: pending push to `main`; Vercel is connected to the existing project and will deploy automatically after push.
-- Production verified: Phase 7B smoke test was completed manually with ROOT_ADMIN and a USER test account.
+- Production verified: Phase 7B smoke test was completed manually; the project owner also confirmed Phase 9.3 ROOT_ADMIN System Role changes and SUPER_ADMIN denial of System Role mutation.
 - Production data: the intentional `TEST_ADMIN` smoke-test assignment was created, verified after logout/login, and cleaned up through the valid workflow. No News production data exists or was created.
 
 ## 3. Phase History
@@ -269,14 +272,45 @@ Status: COMPLETED WITH LIMITATION.
 
 ### Phase 9.3 — System Role Production Deployment & Real-World Smoke Test
 
-Status: Firebase Function DEPLOYED; production browser smoke test PENDING MANUAL VERIFICATION.
+Status: COMPLETED — Firebase Function DEPLOYED; production browser smoke test PASS based on owner-provided evidence.
 
 - Only `setSystemRole` was deployed to Firebase project `along-6e1ce`.
 - Deployment is Node.js 22, 2nd Gen, region `us-central1`, state `ACTIVE`.
 - Production callable URL: `https://us-central1-along-6e1ce.cloudfunctions.net/setSystemRole`.
-- No Firestore Rules, Vercel deployment or production user/data mutation was performed.
-- Frontend source is ready for the user's manual Git push; Vercel will deploy from `main`.
-- Production ROOT → USER → ADMIN smoke test is pending the user's manual browser verification after Vercel deployment.
+- Production browser evidence confirms ROOT_ADMIN can change non-root System Roles, including USER → ADMIN and ADMIN → USER.
+- Production browser evidence confirms SUPER_ADMIN can use the administration area but cannot change another user's System Role or grant ADMIN/SUPER_ADMIN through the System Role workflow.
+- No additional production mutation was performed by Phase 10.1.
+
+### Phase 10.1 — Authorization Consistency & Policy Conformance
+
+Status: COMPLETED locally.
+
+- Canonical backend policy and delegation boundary were implemented.
+- Frontend/backend/Rules conformance and full regression passed.
+- Firestore Rules emulator passed 81 assertions using a temporary CLI config and JDK 21 process configuration.
+- No production data or deployment was changed.
+
+### Phase 10.2 — Permission Explanation & Admin UX
+
+Status: COMPLETED locally; production deployment not performed.
+
+- Added display metadata for all 30 permissions and all System Roles without changing authorization codes.
+- `/admin/users` now explains identity, System Role, Custom Roles, Effective Permissions, permission sources, risk and delegation scope.
+- Custom Role assignment shows the permissions to be granted and whether the actor/recipient can delegate them under the existing policy.
+- `/admin/roles` shows readable System Role and Custom Role permission explanations and delegation warnings.
+- No direct Firestore mutation, new permission, Rules change, production data change or deployment was added.
+- Tests and production build passed.
+
+### Phase 10.3 — Admin Delegated User Management
+
+Status: COMPLETED locally; production deployment not performed.
+
+- Reused existing `users.read`, `users.update`, `roles.assign` and `roles.revoke` permissions; no new permission was added.
+- Added trusted `updateUserProfile` Callable for `displayName` and `photoURL` only.
+- Existing Custom Role assignment/revocation and ROOT-only System Role mutation were preserved.
+- ROOT, inactive and Auth-disabled targets are protected; security fields remain immutable through this workflow.
+- Status/suspend/disable/delete-user workflows were intentionally not implemented.
+- Unit, policy, RBAC, frontend, Rules and build regression passed; browser E2E was not run.
 
 ## 4. Current Architecture
 
@@ -529,8 +563,8 @@ The Rules test uses the local emulator and does not mutate production Firebase d
 - [x] News Firestore indexes deployed.
 - [ ] News frontend deployed to the existing Vercel project `lichvannien`.
 - [x] Phase 9.3 `setSystemRole` Firebase Function deployed to `along-6e1ce`.
-- [ ] Phase 9.3 frontend pushed to `main` and Vercel deployment verified.
-- [ ] Phase 9.3 production ROOT → USER → ADMIN browser smoke test.
+- [x] Phase 9.3 frontend/production browser flow verified by owner-provided evidence.
+- [x] Phase 9.3 production ROOT → USER → ADMIN browser smoke test.
 
 News backend deployment and read-only smoke checks are complete. The frontend will be deployed automatically by Vercel after the manual push to `main`.
 
@@ -548,21 +582,25 @@ Not implemented. Question bank, exam generation, practice mode, exam mode, resul
 
 ## 16. Future Phases
 
-- Phase 9.3 — System Role Production Deployment & Real-World Smoke Test (Function deployed; browser verification pending).
+- Phase 9.3 — System Role Production Deployment & Real-World Smoke Test (completed; Function deployed and browser smoke evidence PASS).
 - Phase 8.5 — News Production Deployment & Smoke Test (Firebase complete; Vercel pending push).
 - Phase 9 — Module 3: Quiz, practice and exam workflows.
-- Phase 10 — Approval and audit workflows.
+- Phase 10.1 — Authorization Consistency & Policy Conformance (COMPLETED; policy conformance and Rules regression PASS).
+- Phase 10.2 — Permission Explanation & Admin UX (COMPLETED locally; no production deployment).
+- Phase 10.3 — Admin Delegated User Management (COMPLETED locally; no production deployment).
+- Phase 10.5 — Audit & Security Event Foundation (COMPLETED locally; no production deployment).
+- Phase 10.6 — News Entitlement / Group / Subscription Foundation (next proposed phase; not started).
 - Phase 11 — Final security audit and Rules review.
 - Phase 12 — Production hardening, performance, monitoring and UX refinement.
 
 These are roadmap proposals, not completed features.
 
 Roadmap alignment note: Phase 7A and Phase 7B are completed and production
-verified. Phase 8.1-8.5A are completed; Phase 8.5B Firebase deployment is complete
-while its Vercel frontend remains pending push. Phase 9.1-9.2A are completed, and
-Phase 9.3 `setSystemRole` Firebase Function deployment is complete. The next
-operational step is manual Git push to `main`, followed by Vercel automatic frontend
-deployment and manual production browser smoke testing.
+verified. Phase 8.1-8.5A are completed; Phase 8.5B Firebase deployment and the
+owner-provided production browser verification are recorded. Phase 9.1-9.3 are
+completed. Phase 10.1 policy-contract, conformance-test and Rules verification are
+complete. Phase 10.2 and Phase 10.3 are completed locally. Phase 10.5 is the
+next proposed implementation phase; Phase 10.4 resource-picker UX remains optional.
 
 ## DO NOT BREAK
 
@@ -603,18 +641,51 @@ deployment and manual production browser smoke testing.
 
 ## NEXT ACTION
 
-Current status: Phase 9.3 — `setSystemRole` Firebase Function deployed; frontend Vercel deployment pending push to `main`.
+Current status: Phase 10.5 COMPLETED locally — trusted audit-event foundation and regression boundaries PASS.
 
-Next step: manually review, commit and push the source to `main`; Vercel will deploy the connected existing project, then perform the production browser smoke test.
+Next step: review and approve Phase 10.6 — News Entitlement / Group / Subscription Foundation. No Phase 10.6 implementation has started.
 
-No production System Role mutation or test user was created. Production browser smoke test remains pending manual verification.
+No production data or deployment was changed by Phase 10.3.
 
 ## Final Review Notes
 
 - File updated: `docs/PROJECT_STATUS.md`.
 - All requested status sections are included.
-- Current phase is recorded as `Phase 8.5B — Firebase deployed; Vercel pending push`.
+- Current phase is recorded as `Phase 10.5 — COMPLETED locally`; next proposed phase is Phase 10.6.
 - Phase 7A and 7B production results are recorded separately from News production deployment results.
 - Phase 8.1-8.5A are completed; Phase 8.5B Firebase deployment is complete and frontend deployment awaits manual Git push.
 - Known limitations and rollout checklist are recorded.
-- No application code, Firestore Rules, Firebase data, deployment or Git history was changed by this documentation task.
+- Phase 10.2 application code and documentation are modified locally only; Firestore Rules, Firebase data, deployment and Git history were not changed.
+
+## Phase 10.4 Status Update
+
+- Phase 10.4 — Admin Resource Selection UX: **COMPLETED locally**.
+- Implemented bounded, trusted News selector read APIs and searchable selectors for News article/category/ACL resources and principals; existing Admin Users user search remains in place.
+- No Firestore Rules, production data, Firebase deployment, commit or push was changed by this phase.
+- Required regression tests, emulator tests, frontend checks, build and `git diff --check` PASS.
+- Browser E2E was not run; manual/browser verification remains a limitation.
+- Current phase: **Phase 10.5 — COMPLETED locally**.
+- Next phase: **Phase 10.6 — News Entitlement / Group / Subscription Foundation** (not started).
+
+## Phase 10.5 Status Update
+
+- Phase 10.5 — Audit & Security Event Foundation: **COMPLETED locally**.
+- Existing trusted callable mutations now write sanitized server-side audit
+  events with SUCCESS/DENIED/FAILED outcomes and correlation IDs.
+- Audit events are append-only from the client perspective; no client Rules
+  access was added and `firestore.rules` was not changed.
+- Audit coverage includes System Role, user profile, Custom Role and News
+  mutation callables. No second authorization or materialization engine was
+  introduced.
+- Required regression, emulator, Rules and frontend tests PASS; Rules test
+  passed 84 assertions with temporary local CLI/JDK21 process configuration.
+- `npm run build` and `git diff --check` PASS.
+- No Firebase/Vercel deployment, production data change, commit or push was
+  performed by Phase 10.5.
+- Known limitations: no audit UI/retention/SIEM, no audit of read callables,
+  local Admin SDK tools are not automatically wrapped, and browser E2E was not
+  run in this phase.
+
+Current phase: **Phase 10.5 — COMPLETED locally**.
+Next proposed phase: **Phase 10.6 — News Entitlement / Group / Subscription
+Foundation**, after review and approval.

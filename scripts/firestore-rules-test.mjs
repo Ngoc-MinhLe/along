@@ -201,6 +201,9 @@ try {
   await deny('8.1 client cannot write News ACL', setDoc(doc(rootDb, 'newsArticles', 'PUBLIC_ARTICLE', 'acl', 'CLIENT_WRITE'), { effect: 'ALLOW' }))
   await deny('8.2 client cannot write News group membership', setDoc(doc(rootDb, 'newsGroups', 'GROUP', 'members', USER_UID), { status: 'active' }))
   await deny('8.1 client cannot write News entitlement', setDoc(doc(rootDb, 'contentEntitlements', USER_UID), { newsLevel: 3, status: 'active' }))
+  await deny('10.5 client cannot create audit event', setDoc(doc(rootDb, 'auditEvents', 'CLIENT_WRITE'), { actorUid: ROOT_UID, result: 'SUCCESS' }))
+  await deny('10.5 client cannot update audit event', updateDoc(doc(rootDb, 'auditEvents', 'CLIENT_WRITE'), { result: 'SUCCESS' }))
+  await deny('10.5 client cannot delete audit event', deleteDoc(doc(rootDb, 'auditEvents', 'CLIENT_WRITE')))
 
   results.forEach((result) => console.log(result))
   console.log(`Firestore Rules security audit PASS (${results.length} assertions).`)

@@ -307,6 +307,20 @@ async function main() {
     actorUid: 'forged', articleId: specialArticle.articleId, accessPolicy: { mode: 'PUBLIC' },
   }), 'invalid-argument')
 
+  const auditEvents = (await db.collection('auditEvents').get()).docs.map((snapshot) => snapshot.data())
+  for (const action of [
+    'NEWS_ARTICLE_CREATED', 'NEWS_ARTICLE_UPDATED', 'NEWS_PUBLISHED',
+    'NEWS_UNPUBLISHED', 'NEWS_ACCESS_POLICY_CHANGED', 'NEWS_CATEGORY_CREATED',
+    'NEWS_CATEGORY_UPDATED', 'NEWS_ACL_CHANGED',
+  ]) {
+    assert.ok(auditEvents.some((event) => event.action === action && event.result === 'SUCCESS'), action)
+  }
+  assert.ok(auditEvents.some((event) => event.action === 'NEWS_ARTICLE_CREATED'
+    && event.result === 'DENIED'
+    && event.actorUid === 'news-no-read'))
+  assert.equal(auditEvents.some((event) => Object.hasOwn(event, 'content')
+    || Object.hasOwn(event, 'permissions')), false)
+
   console.log('News trusted read/mutation emulator integration PASS: access policy, article lifecycle, category/ACL mutation, VIP escalation denial, malformed ACL denial, and server-side authorization verified.')
 }
 

@@ -249,6 +249,19 @@ async function main() {
   await call('disableCustomRole', rootToken, { roleId: disabledRole.roleId })
   await denied(() => call('assignCustomRole', adminToken, { targetUid: 'target-test', customRoleId: disabledRole.roleId }), 'failed-precondition')
 
+  const auditEvents = (await db.collection('auditEvents').get()).docs.map((snapshot) => snapshot.data())
+  for (const action of [
+    'CUSTOM_ROLE_CREATED', 'CUSTOM_ROLE_ASSIGNED', 'CUSTOM_ROLE_UPDATED',
+    'CUSTOM_ROLE_DISABLED', 'CUSTOM_ROLE_ENABLED', 'CUSTOM_ROLE_REVOKED', 'CUSTOM_ROLE_DELETED',
+  ]) {
+    assert.ok(auditEvents.some((event) => event.action === action && event.result === 'SUCCESS'), action)
+  }
+  assert.ok(auditEvents.some((event) => event.action === 'CUSTOM_ROLE_ASSIGNED'
+    && event.result === 'DENIED'
+    && event.actorUid === 'user-test'))
+  assert.equal(auditEvents.some((event) => Object.hasOwn(event, 'permissions')
+    || Object.hasOwn(event, 'claims')), false)
+
   console.log('Custom Role callable emulator integration PASS: authentication, policy, validation, assignment, rebuild, disable/enable, rollback-safe workflow, and deletion guards verified.')
 }
 

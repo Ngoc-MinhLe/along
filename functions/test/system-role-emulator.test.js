@@ -180,6 +180,21 @@ async function main() {
   await denied(() => call('setSystemRole', adminToken, { targetUid: 'user-role-test', targetSystemRole: 'ADMIN' }), 'permission-denied')
   await denied(() => call('setSystemRole', userToken, { targetUid: 'user-role-test', targetSystemRole: 'ADMIN' }), 'permission-denied')
 
+  const auditEvents = (await db.collection('auditEvents').get()).docs.map((snapshot) => snapshot.data())
+  assert.ok(auditEvents.some((event) => event.action === 'SYSTEM_ROLE_CHANGED'
+    && event.result === 'SUCCESS'
+    && event.actorUid === 'root-role-test'
+    && event.targetUid === 'admin-role-target'
+    && event.metadata?.targetSystemRole === 'ADMIN'))
+  assert.ok(auditEvents.some((event) => event.action === 'SYSTEM_ROLE_CHANGED'
+    && event.result === 'DENIED'
+    && event.actorUid === 'admin-role-test'))
+  assert.ok(auditEvents.some((event) => event.action === 'SYSTEM_ROLE_CHANGED'
+    && event.result === 'DENIED'
+    && event.actorUid === 'user-role-test'))
+  assert.equal(auditEvents.some((event) => Object.hasOwn(event, 'permissions')
+    || Object.hasOwn(event, 'claims')), false)
+
   console.log('System Role emulator test PASS: ROOT transitions, ROOT protection, payload validation, non-ROOT denial and target validation verified.')
 }
 

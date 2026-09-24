@@ -1,4 +1,4 @@
-import { PERMISSION_VALUES, PERMISSIONS, isKnownPermission } from './permissions.js'
+import { getPermissionMetadata, PERMISSION_VALUES, PERMISSIONS, isKnownPermission } from './permissions.js'
 import { ROLE_HIERARCHY, SYSTEM_ROLES, hasMinimumRole, isSystemRole } from './roles.js'
 
 const contentPermissions = [
@@ -81,6 +81,70 @@ export function canManageRole(actor, targetRole, action = 'update', roleMap = {}
   if (!hasPermission(actor, `roles.${action}`, roleMap)) return false
   if (!targetRole || targetRole.type !== 'CUSTOM') return false
   return (targetRole.permissions || []).every((permission) => hasPermission(actor, permission, roleMap))
+}
+
+// Having a permission is not the same as being allowed to delegate it. The
+// delegation scope is derived from the trusted policy inputs already used by
+// the page; it is display/validation support only and never replaces backend
+// authorization.
+export function getDelegationScope(actor, roleMap = {}) {
+  if (!actor) return []
+  const actorRole = getSystemRole(actor)
+  const canAssign = actorRole === SYSTEM_ROLES.ROOT_ADMIN
+    || hasPermission(actor, PERMISSIONS.ROLES_ASSIGN, roleMap)
+  if (!canAssign) return []
+  const effective = new Set(getEffectivePermissions(actor, roleMap))
+  return PERMISSION_VALUES.filter((permission) => (
+    effective.has(permission) && getPermissionMetadata(permission).delegable
+  ))
+}
+
+export function getRoleDelegationPreview(actor, targetRole, roleMap = {}) {
+  const permissions = Array.isArray(targetRole?.permissions) ? [...new Set(targetRole.permissions)] : []
+  const knownPermissions = permissions.filter(isKnownPermission)
+  const invalidPermissions = permissions.filter((permission) => !isKnownPermission(permission))
+  const forbiddenPermissions = permissions.filter((permission) => CUSTOM_ROLE_FORBIDDEN_PERMISSIONS.includes(permission))
+  const delegationScope = new Set(getDelegationScope(actor, roleMap))
+  const structuralError = !targetRole
+    || targetRole.type !== 'CUSTOM'
+    || targetRole.status !== 'active'
+    || isSystemRole(targetRole.id)
+  const blockedPermissions = knownPermissions.filter((permission) => !delegationScope.has(permission))
+  const permissionDetails = permissions.map((permission) => {
+    const metadata = getPermissionMetadata(permission)
+    const known = isKnownPermission(permission)
+    const allowed = known && !CUSTOM_ROLE_FORBIDDEN_PERMISSIONS.includes(permission) && delegationScope.has(permission)
+    return {
+      ...metadata,
+      key: permission,
+      allowed,
+      reason: !known
+        ? 'Permission không có trong catalog.'
+        : CUSTOM_ROLE_FORBIDDEN_PERMISSIONS.includes(permission)
+          ? 'Permission này bị policy cấm trong Custom Role.'
+          : !delegationScope.has(permission)
+            ? 'Actor không có permission này trong delegation scope.'
+            : '',
+    }
+  })
+  const actorCanAssign = getSystemRole(actor) === SYSTEM_ROLES.ROOT_ADMIN
+    || hasPermission(actor, PERMISSIONS.ROLES_ASSIGN, roleMap)
+  const canDelegate = Boolean(actorCanAssign && !structuralError && !invalidPermissions.length
+    && !forbiddenPermissions.length && !blockedPermissions.length)
+  return {
+    canDelegate,
+    actorCanAssign,
+    delegationScope: [...delegationScope],
+    permissionDetails,
+    invalidPermissions,
+    forbiddenPermissions,
+    blockedPermissions,
+    reason: structuralError
+      ? 'Role không phải Custom Role active hợp lệ.'
+      : invalidPermissions.length || forbiddenPermissions.length || blockedPermissions.length
+        ? 'Role chứa permission ngoài delegation scope của actor.'
+        : canDelegate ? '' : 'Actor không có quyền gán Custom Role.',
+  }
 }
 
 export function canAssignSystemRole(actor, targetRole, currentTargetRole = SYSTEM_ROLES.USER) {

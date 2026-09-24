@@ -7,39 +7,20 @@ const {
   getTrustedActor,
   hasSystemRole,
   requireCanManageCustomRole,
+  requireCanDelegateCustomRole,
   requirePermission,
 } = require('./authorization')
+const {
+  SYSTEM_ROLE_SET,
+  PERMISSION_SET,
+  CUSTOM_ROLE_FORBIDDEN_PERMISSIONS,
+  ROLE_PERMISSIONS,
+} = require('./policy')
 const { generateRoleId, roleIdCandidate } = require('./role-id')
+const { invokeAudited } = require('./audit')
 
 const ROLE_ID_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/
-const SYSTEM_ROLE_SET = new Set(Object.values(SYSTEM_ROLES))
-const PERMISSION_SET = new Set(PERMISSIONS)
-const FORBIDDEN_CUSTOM_PERMISSIONS = new Set([
-  'users.delete',
-  'roles.create',
-  'roles.update',
-  'roles.disable',
-  'roles.delete',
-  'roles.assign',
-  'roles.revoke',
-])
-
-const ROLE_PERMISSIONS = Object.freeze({
-  USER: ['calendar.search', 'calendar.export'],
-  EDITOR: [
-    'calendar.search', 'calendar.export',
-    'news.read', 'news.create', 'news.update', 'news.delete', 'news.publish',
-    'quiz.question.read', 'quiz.question.create', 'quiz.question.update', 'quiz.question.delete',
-  ],
-  ADMIN: [
-    'calendar.search', 'calendar.export', 'calendar.import',
-    'users.read', 'roles.read', 'roles.assign', 'roles.revoke',
-    'news.read', 'news.create', 'news.update', 'news.delete', 'news.publish',
-    'quiz.question.read', 'quiz.question.create', 'quiz.question.update', 'quiz.question.delete',
-  ],
-  SUPER_ADMIN: PERMISSIONS,
-  ROOT_ADMIN: PERMISSIONS,
-})
+const FORBIDDEN_CUSTOM_PERMISSION_SET = new Set(CUSTOM_ROLE_FORBIDDEN_PERMISSIONS)
 
 function invalidArgument(message) {
   throw new HttpsError('invalid-argument', message)
@@ -87,7 +68,7 @@ function normalizePermissions(permissions) {
   const unique = [...new Set(permissions)]
   const unknown = unique.filter((permission) => !PERMISSION_SET.has(permission))
   if (unknown.length) invalidArgument(`Unknown permission: ${unknown[0]}.`)
-  const forbidden = unique.filter((permission) => FORBIDDEN_CUSTOM_PERMISSIONS.has(permission))
+  const forbidden = unique.filter((permission) => FORBIDDEN_CUSTOM_PERMISSION_SET.has(permission))
   if (forbidden.length) {
     throw new HttpsError('permission-denied', `Permission cannot be granted by a Custom Role: ${forbidden[0]}.`)
   }
@@ -137,7 +118,7 @@ function validateCustomRoleData(roleId, role) {
   if (!Array.isArray(role.permissions)) failedPrecondition('The Custom Role permissions are invalid.')
   const invalidPermissions = [...new Set(role.permissions)].filter((permission) => !PERMISSION_SET.has(permission))
   if (invalidPermissions.length) failedPrecondition('The Custom Role contains an unknown permission.')
-  const forbiddenPermissions = [...new Set(role.permissions)].filter((permission) => FORBIDDEN_CUSTOM_PERMISSIONS.has(permission))
+  const forbiddenPermissions = [...new Set(role.permissions)].filter((permission) => FORBIDDEN_CUSTOM_PERMISSION_SET.has(permission))
   if (forbiddenPermissions.length) failedPrecondition('The Custom Role contains a policy-protected permission.')
   return role
 }
@@ -210,7 +191,7 @@ function buildAuthorizationData(profile, roleMap, currentAuthorization) {
     }
     if (role.status !== 'active') continue
     for (const permission of role.permissions || []) {
-      if (PERMISSION_SET.has(permission) && !FORBIDDEN_CUSTOM_PERMISSIONS.has(permission)) permissions.add(permission)
+      if (PERMISSION_SET.has(permission) && !FORBIDDEN_CUSTOM_PERMISSION_SET.has(permission)) permissions.add(permission)
     }
   }
   const currentVersion = Number.isSafeInteger(currentAuthorization?.version) && currentAuthorization.version >= 1
@@ -401,7 +382,7 @@ async function mutateAssignment(actor, data, operation, db = adminDb) {
   if (operation === 'assignCustomRole' && role.status !== 'active') {
     failedPrecondition('Disabled Custom Roles cannot be assigned.')
   }
-  requireCanManageCustomRole(actor, role, action)
+  requireCanDelegateCustomRole(actor, role, action)
   const targetAuth = await readTargetAuth(payload.targetUid)
   const initialTargetProfile = await readProfile(payload.targetUid, db)
   assertTargetNotRoot(payload.targetUid, initialTargetProfile, targetAuth)
@@ -419,7 +400,7 @@ async function mutateAssignment(actor, data, operation, db = adminDb) {
     if (operation === 'assignCustomRole' && freshRole.status !== 'active') {
       failedPrecondition('Disabled Custom Roles cannot be assigned.')
     }
-    requireCanManageCustomRole(actor, freshRole, action)
+    requireCanDelegateCustomRole(actor, freshRole, action)
     if (profile.systemRole === SYSTEM_ROLES.ROOT_ADMIN) {
       throw new HttpsError('permission-denied', 'ROOT_ADMIN profiles are protected from Custom Role mutation.')
     }
@@ -458,14 +439,8 @@ async function mutateAssignment(actor, data, operation, db = adminDb) {
   }
 }
 
-async function invokeTrusted(request, handler) {
-  const actor = await getTrustedActor(request)
-  try {
-    return await handler(actor, request?.data || {})
-  } catch (error) {
-    if (error instanceof HttpsError) throw error
-    throw new HttpsError('internal', 'Trusted Custom Role mutation failed.')
-  }
+async function invokeTrusted(request, handler, operation) {
+  return invokeAudited(request, handler, operation)
 }
 
 module.exports = {

@@ -58,3 +58,11 @@ export function revokeCustomRole(targetUid, roleId) {
 export function setSystemRole(targetUid, targetSystemRole) {
   return callFunction('setSystemRole', { targetUid, targetSystemRole })
 }
+
+export function updateUserProfile(targetUid, fields) {
+  const payload = { targetUid }
+  for (const field of ['displayName', 'photoURL']) {
+    if (Object.prototype.hasOwnProperty.call(fields || {}, field)) payload[field] = fields[field]
+  }
+  return callFunction('updateUserProfile', payload)
+}

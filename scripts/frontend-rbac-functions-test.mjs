@@ -17,6 +17,7 @@ for (const functionName of [
   'assignCustomRole',
   'revokeCustomRole',
   'setSystemRole',
+  'updateUserProfile',
 ]) {
   assert.match(files.functionsService, new RegExp(`callFunction\\('${functionName}'`), `${functionName} must use Callable Functions`)
 }
@@ -26,6 +27,7 @@ assert.match(files.usersPage, /services\/rbac\/functions/)
 assert.doesNotMatch(files.rolesPage, /(?:createCustomRole|updateCustomRole|setCustomRoleStatus|removeCustomRole|deleteCustomRole|assignCustomRole|revokeCustomRole).*from ['"]\.\.\/services\/rbac\/firestore['"]$/m)
 assert.doesNotMatch(files.usersPage, /(?:createCustomRole|updateCustomRole|setCustomRoleStatus|removeCustomRole|deleteCustomRole|assignCustomRole|revokeCustomRole).*from ['"]\.\.\/services\/rbac\/firestore['"]$/m)
 assert.match(files.usersPage, /setSystemRole\(selected\.id, nextRole\)/)
+assert.match(files.usersPage, /updateUserProfile\(selected\.id, profileDraft\)/)
 assert.match(files.usersPage, /getSystemRole\(actor\) === SYSTEM_ROLES\.ROOT_ADMIN/)
 assert.doesNotMatch(files.usersPage, /(?:setDoc|updateDoc|deleteDoc)\(/)
 assert.doesNotMatch(files.firestoreService, /addDoc|setDoc|updateDoc|deleteDoc|writeBatch|runTransaction/)

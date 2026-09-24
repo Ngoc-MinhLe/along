@@ -11,15 +11,8 @@ const {
   readProfile,
   readUserAuthorization,
 } = require('./custom-role-service')
-
-const ASSIGNABLE_SYSTEM_ROLES = Object.freeze([
-  SYSTEM_ROLES.USER,
-  SYSTEM_ROLES.EDITOR,
-  SYSTEM_ROLES.ADMIN,
-  SYSTEM_ROLES.SUPER_ADMIN,
-])
-
-const SYSTEM_ROLE_SET = new Set(Object.values(SYSTEM_ROLES))
+const { ASSIGNABLE_SYSTEM_ROLES, SYSTEM_ROLE_SET } = require('./policy')
+const { invokeAudited } = require('./audit')
 
 function invalidArgument(message) {
   throw new HttpsError('invalid-argument', message)
@@ -232,14 +225,8 @@ async function setSystemRole(actor, data, db = adminDb, auth = adminAuth) {
   }
 }
 
-async function invokeTrusted(request, handler) {
-  const actor = await getTrustedActor(request)
-  try {
-    return await handler(actor, request?.data || {})
-  } catch (error) {
-    if (error instanceof HttpsError) throw error
-    throw new HttpsError('internal', 'Trusted System Role mutation failed.')
-  }
+async function invokeTrusted(request, handler, operation = 'setSystemRole') {
+  return invokeAudited(request, handler, operation)
 }
 
 module.exports = {

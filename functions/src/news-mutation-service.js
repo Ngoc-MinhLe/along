@@ -7,6 +7,7 @@ const {
   requirePermission,
 } = require('./authorization')
 const { ACCESS_MODES, normalizeAccessPolicy } = require('./news-service')
+const { invokeAudited } = require('./audit')
 
 const ARTICLE_STATUSES = new Set(['draft', 'published'])
 const CATEGORY_STATUSES = new Set(['active', 'disabled'])
@@ -485,14 +486,8 @@ async function removeNewsAclEntry(actor, data, db = adminDb) {
   }
 }
 
-async function invokeNewsMutation(request, handler) {
-  const actor = await getTrustedActor(request)
-  try {
-    return await handler(actor, request?.data || {})
-  } catch (error) {
-    if (error instanceof HttpsError) throw error
-    throw new HttpsError('internal', 'Trusted News mutation failed.')
-  }
+async function invokeNewsMutation(request, handler, operation) {
+  return invokeAudited(request, handler, operation)
 }
 
 module.exports = {

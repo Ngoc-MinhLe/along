@@ -21,7 +21,7 @@ Kết luận chính:
 2. **ROOT_ADMIN hiện có thể cấp ADMIN** thông qua `setSystemRole`, với điều kiện target tồn tại, active, không phải ROOT và caller vượt qua toàn bộ kiểm tra trusted ROOT.
 3. **ADMIN có thể đọc User và assign/revoke Custom Role trong phạm vi policy**, nhưng không có toàn quyền quản trị user và không thể thay đổi System Role.
 4. `SUPER_ADMIN` hiện có cùng 30 permission catalog với `ROOT_ADMIN`, nhưng vẫn không được gọi mutation System Role vì backend bắt buộc `requireRootActor()`. Đây là khác biệt về trust boundary.
-5. Còn các khoảng trống cần xử lý trước khi mở rộng quản trị: audit log chưa hiện thực, user authorization mới chưa tự materialize bằng Auth trigger, policy catalog được biểu diễn ở nhiều lớp, và production browser smoke test còn phụ thuộc xác minh thủ công.
+5. Còn các khoảng trống cần xử lý trước khi mở rộng quản trị: audit log chưa hiện thực, user authorization mới chưa tự materialize bằng Auth trigger, policy catalog được biểu diễn ở nhiều lớp và delegation boundary chưa có contract hiển thị rõ trong UI.
 
 Roadmap khuyến nghị:
 
@@ -62,9 +62,9 @@ Kết quả kiểm tra cục bộ trong lượt audit:
 | `npm run test:system-role-tool` | PASS |
 | `npm run build` | PASS; có cảnh báo bundle lớn hơn 500 kB |
 | `git diff --check` trước khi tạo tài liệu | PASS |
-| `npm run test:rules` | **NEEDS VERIFICATION**: Firebase CLI bị `EPERM` khi đọc `C:\\Users\\DELL\\.config\\configstore\\firebase-tools.json`; chưa xác định lỗi trong Rules |
+| `npm run test:rules` | PASS — 81 assertions; chạy với XDG_CONFIG_HOME tạm trong workspace và JDK 21 |
 
-`docs/PROJECT_STATUS.md` ghi nhận Rules emulator đã PASS 81 assertions ở lần review trước. Lần chạy audit này chưa tái lập được vì lỗi môi trường Firebase CLI.
+`npm run test:rules` đã được tái lập thành công. EPERM chỉ nằm ở Firebase CLI configstore mặc định; test được chạy an toàn với XDG_CONFIG_HOME tạm trong workspace và JDK 21, không sửa Rules và không chạm production.
 
 ## 3. Kiến trúc hiện tại
 
@@ -341,9 +341,9 @@ Role update/disable rebuild nhiều user bằng các batch tuần tự và có r
 
 ### NEEDS VERIFICATION
 
-- Production browser smoke test Phase 9.3 vẫn được `PROJECT_STATUS.md` ghi là pending manual verification.
-- User brief nói Vercel frontend đã deploy, nhưng repository status hiện vẫn ghi frontend pending push/deployment. Cần xác nhận trực tiếp trên Vercel/GitHub.
-- `npm run test:rules` đã PASS theo status lịch sử, nhưng lần chạy audit bị Firebase CLI `EPERM` ở local config store. Cần chạy lại sau khi môi trường CLI được sửa an toàn.
+- Production browser evidence do chủ dự án cung cấp: ROOT_ADMIN đã đổi System Role thành công; SUPER_ADMIN truy cập được hệ thống quản trị nhưng không được đổi System Role của User. Cần cập nhật `PROJECT_STATUS.md` ở một lượt documentation riêng nếu muốn đồng bộ status file.
+- Repository status cũ có thể còn ghi frontend pending push/deployment; bằng chứng browser production mới nhất cần được đối chiếu với commit/Vercel deployment trước khi chốt release metadata.
+- `npm run test:rules` đã PASS 81 assertions sau khi dùng Firebase CLI configstore tạm thời và JDK 21 cho đúng process test. Không còn blocker Rules trong Phase 10.1.
 
 ## 9. Phân loại công việc còn lại
 
@@ -402,7 +402,7 @@ Các hạng mục cần ưu tiên vì liên quan trực tiếp đến trust boun
 
 **DoD:** user lifecycle test, drift test, stale claim test, malformed role test và Rules/Functions regression PASS.
 
-### Phase 10.2 — Audit & Security Event Foundation
+### Phase 10.5 — Audit & Security Event Foundation
 
 **Mục tiêu:** có lịch sử đáng tin cho mutation nhạy cảm.
 
@@ -562,10 +562,12 @@ Mỗi phase chỉ được đánh dấu hoàn thành khi:
 
 Theo `docs/PROJECT_STATUS.md` và source hiện tại:
 
-- Current operational phase: **Phase 9.3 — System Role Production Deployment & Real-World Smoke Test**, Function đã deploy; browser/frontend verification còn pending theo status document.
-- Next immediate gate: **Production closure/manual browser smoke test**, không phải mutation feature mới.
-- Next implementation phase khuyến nghị: **Phase 10.1 — Authorization Consistency & Policy Conformance**.
-- Phase 10.2 Audit nên đứng ngay sau hoặc làm cùng 10.1 nếu muốn mọi mutation mới đều có forensic trail.
+- Current phase: **Phase 10.5 — Audit & Security Event Foundation — COMPLETED locally**.
+- Phase 9.3: Function đã deploy và production browser evidence đã được chủ dự án xác nhận; status document cần được đồng bộ riêng nếu cần.
+- Phase 10.2 — Permission Explanation & Admin UX đã được triển khai local và regression-tested PASS.
+- Phase 10.3 — Admin Delegated User Management đã được triển khai local và regression-tested PASS.
+- Next implementation phase khuyến nghị: **Phase 10.6 — News Entitlement / Group / Subscription Foundation**.
+- Phase 10.5 Audit đã được hoàn thành locally; Phase 10.6 là bước tiếp theo sau review.
 
 Tài liệu này là roadmap/audit only. Không phase nào ở trên được implement trong lượt này.
 
@@ -591,8 +593,477 @@ Tài liệu này là roadmap/audit only. Không phase nào ở trên được im
 | User có thể tự nâng quyền không? | Không qua trusted path/Rules hiện tại |
 | Audit log đã đầy đủ chưa? | NO — NEEDS IMPLEMENTATION |
 | Authorization consistency lifecycle đã đầy đủ chưa? | Chưa; new-user trigger/materialization còn là known limitation |
-| Phase tiếp theo nên làm gì? | Đóng production gate, sau đó Phase 10.1 consistency/policy conformance |
+| Phase tiếp theo nên làm gì? | Phase 10.6 News Entitlement / Group / Subscription Foundation |
 
 ---
 
 **Kết luận cuối:** Nền tảng hiện tại đủ để tiếp tục roadmap có kiểm soát, nhưng không nên mở rộng quyền ADMIN hoặc VIP production chỉ dựa vào UI. Trusted backend, materialized authorization, Rules, auditability và consistency checks phải tiếp tục là các invariant bắt buộc.
+
+---
+
+# Phase 10 — Roadmap and Implementation Status
+
+Phần này là bản refinement và status có hiệu lực cho kế hoạch Phase 10 dựa trên bằng chứng production mới nhất do chủ dự án cung cấp. Các phần roadmap trước vẫn được giữ để làm lịch sử audit; nếu có khác biệt về thứ tự hoặc tên phase, phần này được ưu tiên.
+
+## 19. ROLE / PERMISSION / DELEGATION MODEL
+
+### 19.1 Bốn khái niệm phải tách biệt
+
+| Khái niệm | Ý nghĩa | Nguồn authoritative |
+|---|---|---|
+| System Role | Vai trò nền tảng cố định: USER, EDITOR, ADMIN, SUPER_ADMIN, ROOT_ADMIN | Auth Claims + users/{uid}.systemRole + consistency check |
+| Custom Role | Nhóm permission do trusted policy cho phép, được gán bằng role ID | roles/{roleId} và users/{uid}.customRoles |
+| Permission | Một khả năng thao tác cụ thể, ví dụ news.publish | Permission Catalog |
+| Effective Permission | Union sau khi tính System Role + active Custom Role và lọc policy | userAuthorizations/{uid} |
+| Delegation | Quyền cấp/thu hồi role hoặc permission cho actor khác | Trusted backend policy, không suy ra tự động từ permission |
+
+Having a permission và Being allowed to delegate that permission là hai khái niệm khác nhau. Có permission để thực hiện một hành động không mặc nhiên cho phép cấp hành động đó cho User khác.
+
+Ví dụ:
+
+- SUPER_ADMIN có nhiều permission, thậm chí 30 permission theo catalog hiện tại, nhưng không được gọi setSystemRole.
+- ADMIN có roles.assign và roles.revoke, nhưng không vì vậy mà được assign mọi Custom Role cho mọi target.
+- Actor có news.publish có thể xuất bản bài viết nếu policy cho phép, nhưng không mặc nhiên được tạo role chứa news.publish hoặc cấp role đó cho User khác.
+
+### 19.2 Mô hình thực tế
+
+#### ROOT_ADMIN
+
+- Có thể thay đổi System Role qua trusted setSystemRole.
+- Có thể cấp USER, EDITOR, ADMIN, SUPER_ADMIN.
+- Không được tạo/cấp ROOT_ADMIN qua Custom Role hoặc payload.
+- Không được phá root lock, tạo ROOT thứ hai hoặc sửa target ROOT.
+- Có thể quản lý Custom Role theo policy hiện tại.
+
+#### SUPER_ADMIN
+
+- Có 30 Effective Permissions theo policy hiện tại.
+- Có thể sử dụng các chức năng quản trị mà permission cho phép.
+- Có thể quản lý Custom Role nếu policy/backend cho phép.
+- Không được thay đổi System Role của User khác.
+- Không được cấp SUPER_ADMIN hoặc ADMIN qua setSystemRole.
+- Không được tạo đường vòng tới ROOT bằng Custom Role.
+
+#### ADMIN
+
+- Có users.read, một số roles.*, Calendar import và các module được policy cấp.
+- Có thể assign/revoke Custom Role trong delegation boundary của mình.
+- Không được tự nâng System Role.
+- Không được cấp System Role cho User khác trong policy hiện tại.
+- Không được tạo Custom Role có permission vượt quá phạm vi delegation.
+
+#### EDITOR
+
+- Có quyền nội dung theo catalog hiện tại.
+- Không có quyền quản trị User/System Role mặc định.
+- Không được tự cấp Custom Role hoặc permission cho mình/người khác.
+
+#### USER
+
+- Có quyền nghiệp vụ cơ bản theo catalog hiện tại.
+- Không có quyền quản trị.
+- Không được đổi System Role, Custom Role, permission, entitlement hoặc ACL bằng client.
+
+### 19.3 Delegation boundary cần được định nghĩa riêng
+
+Phase 10.1 phải chốt một hàm policy rõ ràng, khái niệm:
+
+~~~text
+canDelegate(actor, delegationAction, targetResource)
+~~~
+
+Hàm này không được chỉ kiểm tra hasPermission(actor, roles.assign). Mà phải kiểm tra thêm:
+
+- role/permission target có hợp lệ và active không;
+- toàn bộ permission của target role có nằm trong actor delegation scope không;
+- target user có thuộc scope actor được tác động không;
+- target có phải ROOT hoặc System Role protected không;
+- action có cho phép tự tác động lên chính actor không;
+- actor có đang cố tạo chuỗi privilege escalation không;
+- target role có chứa permission dành riêng cho trusted/system workflow không.
+
+### 19.4 Nguyên tắc không tạo privilege escalation
+
+Không được tồn tại đường đi:
+
+~~~text
+USER/ADMIN/SUPER_ADMIN
+  -> tạo hoặc sửa Custom Role
+  -> nhúng quyền System Role/trusted mutation
+  -> assign cho bản thân hoặc User khác
+  -> vượt hierarchy hoặc Root trust boundary
+~~~
+
+Các invariant bắt buộc:
+
+- Custom Role không được mang ID của System Role.
+- Custom Role không được cấp ROOT.
+- Sensitive permission bị policy cấm không được materialize.
+- Actor không được cấp role có delegation scope cao hơn scope của actor.
+- Direct Firestore write không được thay thế Callable authorization.
+- Frontend chỉ hiển thị control, không quyết định authority.
+
+## 20. Phase 10.1 — Authorization Consistency & Policy Conformance
+
+### Mục tiêu
+
+Tạo contract kiểm chứng thống nhất cho:
+
+~~~text
+System Role -> baseline permissions
+Custom Role -> validated permissions
+System Role + Custom Roles -> Effective Permissions
+Effective Permissions + target/policy -> Delegation decision
+~~~
+
+### Phạm vi bắt buộc
+
+1. Xác định một nguồn policy chuẩn hoặc cơ chế generated/conformance để tránh drift giữa:
+   - src/services/rbac/permissions.js;
+   - src/services/rbac/roles.js;
+   - src/services/rbac/policy.js;
+   - functions/src/auth.js;
+   - functions/src/custom-role-service.js;
+   - firestore.rules.
+2. Xác định rõ System Role → permissions, bao gồm việc SUPER_ADMIN và ROOT_ADMIN có cùng 30 permission nhưng trust boundary khác nhau.
+3. Xác định Custom Role → permissions: catalog validation, forbidden permission, active/disabled và malformed role behavior.
+4. Xác định Effective Permissions: union, deduplication, disabled role exclusion, unknown permission exclusion và version/consistency.
+5. Xác định delegation boundary độc lập với hasPermission.
+6. Server-side enforcement: actor từ request.auth.uid; server đọc profile/claims/authorization; không tin payload role/permission/actor; fail closed.
+7. Frontend visibility chỉ là UX guard; loading/error state không được biến thành quyền.
+8. Firestore Rules không mở write cho userAuthorizations; protected fields vẫn cấm direct write.
+9. Callable Functions dùng payload allowlist, mutation/delegation check, consistency verification và audit hook.
+
+### Conformance test matrix
+
+| Scenario | Expected |
+|---|---|
+| USER reads own profile | Allow theo owner policy |
+| USER changes own System Role | Deny |
+| USER changes own Custom Role | Deny |
+| ADMIN uses allowed role assignment | Allow only within delegation boundary |
+| ADMIN assigns role vượt scope | Deny |
+| SUPER_ADMIN calls setSystemRole | Deny |
+| ROOT assigns non-root System Role | Allow |
+| Any actor assigns ROOT | Deny |
+| Any actor forges actorUid | Deny |
+| Disabled Custom Role | Excluded |
+| Malformed Custom Role | Excluded/deny, không grant |
+| Missing userAuthorizations | Protected operation deny/fail closed |
+| Profile/claims/authz mismatch | Deny và tạo repair signal |
+
+### Security gate
+
+Không bắt đầu Phase 10.3 trước khi conformance test chứng minh rõ having và delegating không bị gộp thành một điều kiện.
+
+## 21. Phase 10.2 — Permission Explanation & Admin UX
+
+### Mục tiêu
+
+Người quản trị nhìn vào Role/User có thể hiểu ngay:
+
+~~~text
+Role/User này được làm gì?
+Không được làm gì?
+Có được cấp tiếp gì cho người khác?
+Phạm vi cấp tiếp đến đâu?
+~~~
+
+### Permission catalog metadata
+
+Mỗi permission nên có metadata tương ứng, không thay đổi permission code hiện có:
+
+| Field | Ý nghĩa |
+|---|---|
+| code | Permission code ổn định, ví dụ news.publish |
+| displayName | Tên hiển thị tiếng Việt |
+| description | Giải thích hành động |
+| resource/module | users, roles, calendar, news, quiz, ... |
+| action | read, create, update, publish, assign, ... |
+| risk | low/medium/high hoặc cấp rủi ro tương đương |
+| scope | self, assigned target, module-wide, system-wide |
+| delegable | Có thể cấp tiếp hay không theo policy |
+| requiresConfirmation | Có cần confirmation mạnh hơn không |
+
+Metadata là lớp giải thích/UI; authorization vẫn phải dùng code và server-side policy.
+
+### Role/User views
+
+UI cần có hai lớp:
+
+1. Role view: System Role hoặc Custom Role; permission code; tên dễ hiểu; mô tả; risk/scope; delegation scope.
+2. User view: System Role; Custom Roles active/disabled; Effective Permissions; nguồn của từng permission nếu có thể; delegation scope của actor đang xem.
+
+### Confirmation UX
+
+Trước assign role, UI nên hiển thị preview:
+
+~~~text
+Role: QUẢN TRỊ TIN TỨC
+
+Permissions:
+✓ Xem tin
+✓ Tạo tin
+✓ Sửa tin
+✓ Xuất bản
+✓ Gỡ xuất bản
+✓ Xóa tin
+
+Delegation:
+- Có/không được cấp role này cho User khác
+- Nếu có: phạm vi nào
+
+Target: User A
+Hậu quả: Effective Permissions của User A sẽ thay đổi
+~~~
+
+Confirmation không thay thế backend check. Backend phải re-read role/policy tại thời điểm mutation.
+
+## 22. Phase 10.3 — Delegated User Management
+
+### Câu hỏi policy phải chốt trước implementation
+
+- ROOT_ADMIN được làm gì ngoài setSystemRole và Custom Role mutation?
+- SUPER_ADMIN có được quản lý User nào, Custom Role nào?
+- ADMIN có được suspend/restore User không?
+- ADMIN có được assign/revoke mọi Custom Role hay chỉ role trong delegation scope?
+- Ai được tạo/sửa/disable/delete Custom Role?
+- Actor có được cấp permission mà chính actor không có không?
+- Actor có được cấp permission mạnh hơn delegation boundary không?
+- Actor có được cấp role cho chính mình không?
+- Actor có được cấp role chứa quyền quản trị cho User khác không?
+- ADMIN có được chuyển USER ↔ EDITOR hoặc USER ↔ ADMIN không?
+
+### Policy mặc định an toàn để đánh giá
+
+| Actor | System Role mutation | Custom Role definition | Assign/revoke Custom Role |
+|---|---|---|---|
+| ROOT_ADMIN | Non-root allowlist | Theo policy | Theo policy |
+| SUPER_ADMIN | Deny | Theo policy hiện tại | Chỉ role trong scope |
+| ADMIN | Deny trong phase đầu | Chỉ khi được cấp riêng | Chỉ role trong scope |
+| EDITOR | Deny | Deny | Deny mặc định |
+| USER | Deny | Deny | Deny |
+
+Đây là baseline đề xuất, không phải thay đổi source hiện tại.
+
+### Enforcement requirements
+
+- Callable đọc actor trusted.
+- Payload không có actor/role/permission authority.
+- Target root/system role protected.
+- canDelegate được gọi sau khi role được validate.
+- Không cho self-escalation.
+- Không cho role chain vượt actor scope.
+- Authorization materialization cập nhật nhất quán.
+- Audit event ghi theo contract được chốt.
+- Failure fail closed và có repair/rollback.
+
+## 23. Phase 10.4 — Admin Resource Selection UX
+
+### Rà soát technical identifiers
+
+| Trường | Đề xuất UX | Ghi chú |
+|---|---|---|
+| Article ID | Search/autocomplete hoặc chọn từ article list | Không bắt nhập thủ công nếu backend có thể liệt kê bài viết |
+| Category ID | Select/search category | Hiển thị tên category, giữ ID ẩn/readonly |
+| Resource ID | Resource picker theo module | Fallback manual input chỉ khi resource không thể list |
+| Principal ID | User/group autocomplete | Hiển thị email/displayName/group name, lưu ID authoritative |
+
+### Nguyên tắc
+
+- Technical ID vẫn giữ trong data model và callable payload.
+- UI ưu tiên label dễ hiểu và resolve ID từ dữ liệu hiện có.
+- Backend validate ID tồn tại, scope và quyền actor.
+- Không tự sửa implementation Article ID hiện tại trong roadmap này.
+- Resource list lớn phải dùng server-side search/pagination.
+
+## 24. Phase 10.5 — Audit & Security Event Foundation
+
+### Events tối thiểu
+
+- System Role change;
+- Custom Role create/update/disable/enable/delete;
+- Custom Role assign/revoke;
+- permission/delegation change;
+- user status change;
+- News article access/ACL mutation;
+- entitlement/group/subscription mutation ở phase sau.
+
+### Audit record tối thiểu
+
+~~~js
+{
+  eventId,
+  actorUid,
+  actorSystemRole,
+  action,
+  targetType,
+  targetId,
+  before,
+  after,
+  source,
+  success,
+  errorCode,
+  correlationId,
+  createdAt
+}
+~~~
+
+Không ghi token, password, service account, secret hoặc toàn bộ authorization document nếu không cần thiết.
+
+### Invariants
+
+- Chỉ trusted backend được ghi audit.
+- Client không được sửa/xóa audit event.
+- Audit phản ánh success/failure thực tế, không ghi success trước mutation chưa commit.
+- Before/after được sanitize.
+- Root-sensitive operation có event riêng.
+- Read audit dùng audit.read và scope policy rõ ràng.
+
+## 25. Phase 10.6 — News Entitlement / Group / Subscription
+
+Chỉ bắt đầu sau khi Phase 10.1 và audit/delegation foundation cần thiết ổn định.
+
+Phải phân biệt:
+
+- PUBLIC: không cần đăng nhập;
+- authenticated users: cần Auth;
+- role-based: dựa trên System Role khi business thực sự yêu cầu;
+- custom-role-based: chỉ dùng khi policy chấp thuận, không thay entitlement;
+- group-based: membership authoritative;
+- subscription/entitlement: source riêng, có expiry/revoke.
+
+Không suy diễn VIP chỉ từ Custom Role. Entitlement phải có schema, thời hạn, revoke semantics và server-side read authorization.
+
+## 26. Phase 10.7 — Quiz Foundation
+
+Chỉ bắt đầu sau authorization/delegation và audit foundation đủ ổn định.
+
+Phạm vi: question bank, category/tag, practice mode, answer feedback, exam model, grading contract và sau đó exam mode.
+
+Security gate:
+
+- mutation qua trusted backend;
+- practice và exam tách read model;
+- không leak đáp án ở exam mode;
+- permission theo catalog;
+- không ảnh hưởng Module 1/News.
+
+## 27. Phase 10.8 — Production Hardening
+
+Bao gồm regression/conformance/security tests, production smoke test có cleanup, monitoring, rollback/repair strategy, deployment checklist, pagination/index review, browser E2E nếu được phê duyệt, bundle/performance review, audit retention và backup/restore drill.
+
+## 28. Dependency graph và thứ tự làm trước
+
+~~~text
+Phase 9.3 evidence/status closure
+            ↓
+Phase 10.1 policy + consistency + delegation contract
+            ↓
+Phase 10.2 permission explanation + admin UX
+            ↓
+Phase 10.3 delegated user management
+            ↓
+Phase 10.5 audit/security events
+       ↙                    ↘
+Phase 10.4 resource UX       Phase 10.6 News entitlement
+                                ↓
+                         Phase 10.7 Quiz
+                                ↓
+                         Phase 10.8 hardening
+~~~
+
+Điều chỉnh triển khai an toàn:
+
+1. Phase 10.1 phải làm trước vì mọi UI và delegated mutation cần delegation contract.
+2. Phase 10.2 có thể làm UI read-only sau contract, trước mutation delegated.
+3. Phase 10.3 không mở System Role cho ADMIN nếu policy chưa được quyết định.
+4. Phase 10.5 audit cần hoàn thành trước khi có nhiều mutation production mới; có thể bắt đầu song song với 10.3 nhưng mutation nhạy cảm không được productionize nếu thiếu audit plan.
+5. Phase 10.4 resource picker phụ thuộc schema/list API của từng module, không được tự tạo resource model song song.
+6. Phase 10.6 phụ thuộc entitlement/group model; không dùng Custom Role như workaround.
+7. Phase 10.7 phụ thuộc permission và audit boundary.
+
+## 29. Security gates trước production
+
+Không deploy phase mới nếu chưa đạt:
+
+1. Source audit và schema review.
+2. Payload allowlist.
+3. Actor lấy từ Auth context.
+4. Không tin role/permission/claims/effectivePermissions từ client.
+5. ROOT lock và exactly-one-ROOT được giữ.
+6. Không có Custom Role giả System Role.
+7. Having permission và delegating permission được test riêng.
+8. Self-escalation, escalation target và forged actor đều DENY.
+9. Missing/stale/malformed authorization fail closed.
+10. Firestore direct write trái policy DENY.
+11. Callable unit/emulator tests PASS.
+12. Rules tests PASS trong môi trường Java/Firebase CLI hợp lệ.
+13. Frontend visibility tests PASS nhưng không được coi là security proof.
+14. Audit/rollback/repair plan có evidence.
+15. Production smoke fixture cleanup được chứng minh.
+16. check:functions, build và diff check PASS.
+17. Không deploy/ghi production trước checkpoint phê duyệt riêng.
+
+## 30. Cập nhật trạng thái và giới hạn
+
+Evidence production mới do chủ dự án cung cấp:
+
+- ROOT_ADMIN đổi được System Role của User.
+- ROOT_ADMIN thực hiện được USER → ADMIN và ADMIN → USER.
+- SUPER_ADMIN vào được hệ thống quản trị.
+- SUPER_ADMIN không được thay đổi System Role của User khác.
+- SUPER_ADMIN không thể cấp SUPER_ADMIN/ADMIN qua System Role function.
+- System Roles vẫn fixed/read-only.
+- Custom Role assign/revoke và Effective Permissions đang hoạt động.
+
+Các điểm chưa được suy diễn thành tính năng mới:
+
+- Chưa mở System Role mutation cho ADMIN.
+- Chưa coi roles.assign là quyền assign mọi Custom Role.
+- Chưa coi permission sở hữu là delegation permission.
+- Chưa thay đổi Article ID UI.
+- Chưa thêm audit implementation.
+- Chưa triển khai VIP entitlement/group/subscription.
+- Chưa triển khai Quiz.
+
+## 31. Checkpoint sau Phase 10.2
+
+Phase 10.2 đã được triển khai ở local checkpoint; phần dưới đây ghi nhận production safety của phase đó.
+
+- Files source sửa: permission metadata, policy explanation helpers, Admin Users/Role UX và CSS; không sửa backend mutation contract.
+- Firebase Functions sửa/deploy: không có.
+- Firestore Rules sửa/deploy: không có.
+- Auth sửa: không có.
+- Production data thay đổi: không có.
+- Commit/push: không có.
+
+Phase 10.1, Phase 10.2 và Phase 10.3 đã COMPLETED ở local checkpoint. Phase nên triển khai tiếp theo sau khi được duyệt: **Phase 10.5 — Audit & Security Event Foundation**.
+
+## Phase 10.4 Checkpoint Update
+
+- Phase 10.4 — Admin Resource Selection UX: **COMPLETED locally**.
+- Trusted, bounded selector reads were added only where the existing News backend model already supports them. Existing Callable mutation contracts and RBAC authorization remain the security boundary.
+- No new authorization engine, entitlement model, group-membership workflow, Firestore Rules change, production data change, deployment, commit or push was made.
+- Required regression/emulator tests, frontend checks, build and diff validation passed. Browser E2E was not run.
+- Next proposed implementation phase: **Phase 10.6 — News Entitlement / Group / Subscription Foundation**.
+
+## Phase 10.5 Checkpoint Update
+
+- Phase 10.5 — Audit & Security Event Foundation: **COMPLETED locally**.
+- Existing trusted callable mutation paths now use the centralized sanitized
+  audit-event writer. Audit records capture trusted actor, action, resource,
+  outcome and correlation metadata without sensitive payloads.
+- Direct client audit writes remain denied by the existing Rules default deny;
+  Firestore Rules were not changed.
+- Functions, emulator, policy, RBAC, authorization, frontend, Rules and build
+  regression checks PASS. Rules verification passed 84 assertions using a
+  temporary local Firebase CLI configuration and JDK 21 process environment.
+- No production deployment, production data mutation, commit or push was
+  performed.
+- Known limitations are documented in `docs/PHASE_10_5_REPORT.md`: no audit UI,
+  retention/SIEM integration, read-event audit, or automatic wrapping of local
+  Admin SDK tools.
+- Current phase: **Phase 10.5 — COMPLETED locally**.
+- Next proposed implementation phase: **Phase 10.6 — News Entitlement / Group /
+  Subscription Foundation**.
