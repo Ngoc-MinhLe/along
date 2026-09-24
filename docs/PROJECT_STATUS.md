@@ -1,6 +1,6 @@
 # PROJECT STATUS
 
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-24
 
 ## 1. Project Overview
 
@@ -14,16 +14,18 @@ Last reviewed: 2026-09-23
 - Repository: `https://github.com/Ngoc-MinhLe/along.git`.
 - Deployment configuration: Vite builds to `dist`; `vercel.json` rewrites SPA routes to `index.html`.
 - Package manager: npm.
-- Current state: Phase 8 News architecture design is complete; implementation has not started. Only this status document is modified in the current checkpoint.
+- Current state: Phase 8.5B pre-push validation. News Functions and Firestore indexes are deployed; frontend Vercel deployment is pending push to `main`.
 
 ## 2. Current Status
 
-Current Phase: Phase 8 - News Foundation Design
+Current Phase: Phase 8.5B — Final Pre-Push Validation
 
-Status: DESIGN COMPLETE / IMPLEMENTATION NOT STARTED
+Status: IN PROGRESS — LOCAL VALIDATION COMPLETE; WAITING FOR MANUAL GIT PUSH
 
-- Local completed: Phases 1-7A have implementation and regression-test coverage; Phase 8 has design only.
+- Local completed: Phases 1-7B and News Phases 8.1-8.5A have implementation and regression-test coverage; Phase 8.5B Firebase deployment is complete.
 - Production deployed: Module 1 frontend, Authentication/RBAC frontend, current Firestore Rules, Phase 6C Functions and Phase 7A Custom Role assignment are deployed according to the project rollout record.
+- Production deployed: News Functions and required Firestore indexes.
+- Frontend production deployment: pending push to `main`; Vercel is connected to the existing project and will deploy automatically after push.
 - Production verified: Phase 7B smoke test was completed manually with ROOT_ADMIN and a USER test account.
 - Production data: the intentional `TEST_ADMIN` smoke-test assignment was created, verified after logout/login, and cleaned up through the valid workflow. No News production data exists or was created.
 
@@ -149,7 +151,7 @@ Status: deployed and production materialization verified.
 - Added Admin SDK rebuild for one user, all users, dry-run and consistency checks.
 - Assign/revoke, System Role changes, role enable/disable and role permission updates recalculate affected authorizations.
 - Client writes to authorization documents are denied.
-- Rules emulator test suite expanded to 73 assertions.
+- Rules emulator test suite expanded to 81 assertions.
 
 Tests: `test:authorization`, `test:rbac`, `test:system-role-tool`, `test:rules` and `build` all PASS at the latest review.
 
@@ -180,15 +182,58 @@ Status: PASS / COMPLETED.
 - Verified USER has no UI/workflow access to policy-protected mutations.
 - Test data was removed through the valid workflow after verification.
 
-### Phase 8 - Module 2: News Foundation & Access Policy
+### Phase 8.1 — News Access Contract + Trusted Read Authorization
 
-Status: design complete / implementation not started.
+Status: COMPLETED.
 
-- Surveyed the existing RBAC, trusted Functions, Firestore Rules, frontend routes and tests.
-- Proposed PUBLIC, VIP 1/2/3 and SPECIAL ACL access policy without creating a second authorization engine.
-- Proposed News articles, categories, ACL, groups and content entitlement data model.
-- No News source code, collection, Rules match, Function, production data or deployment was created.
-- Next implementation checkpoint: Phase 8.1 - News Access Contract + Trusted Read Authorization.
+- Trusted News read contract implemented through callable Functions.
+- PUBLIC, VIP1, VIP2, VIP3 and SPECIAL access decisions use the existing RBAC authorization flow.
+- Article, category, entitlement and ACL validation remain server-side.
+
+### Phase 8.2 — Trusted Backend News Mutation
+
+Status: COMPLETED.
+
+- Trusted callable mutations cover article lifecycle, access policy, categories and Special ACL management.
+- Client direct News/ACL/entitlement writes remain denied by Firestore Rules.
+- Actor identity and permissions are obtained server-side; client payload cannot grant access.
+
+### Phase 8.3 — News Frontend Integration
+
+Status: COMPLETED locally; production frontend deployment pending push to `main`.
+
+- Added News client callable service, list/detail pages and management page.
+- Added routes for `/tin-tuc`, `/tin-tuc/:articleId` and `/admin/news`.
+- UI visibility uses existing permission gates; backend remains the security boundary.
+
+### Phase 8.4 — News Integration Test & Production Readiness
+
+Status: COMPLETED / PASS.
+
+- Guest, ordinary user, News-permission user, lifecycle, access-level and ACL scenarios passed on the Firebase Emulator.
+- Forged actor/role/permission payloads, VIP escalation and direct Firestore News writes were denied.
+- Frontend News contract checks, RBAC regression, authorization regression, Rules audit and production build passed.
+- No production News data was created during integration testing.
+
+### Phase 8.5A — News Pre-Deployment Review
+
+Status: COMPLETED.
+
+- News callable exports, Node.js 22 runtime configuration, Firestore indexes, frontend routes and Firebase configuration were reviewed.
+- Regression tests and production build passed.
+- No Firestore Rules change was required.
+
+### Phase 8.5B — News Production Deployment & Smoke Test
+
+Status: PARTIALLY COMPLETED — Firebase deployed; Vercel frontend pending push to `main`.
+
+- The 12 News callable Functions were deployed to Firebase project `along-6e1ce`.
+- The 2 required News Firestore indexes were deployed.
+- `listNews` was redeployed once to accept the frontend's `categoryId: null` payload without changing authorization behavior.
+- Read-only production smoke tests passed for `listNews` and `getNewsArticle` with a nonexistent article ID.
+- Mutation, lifecycle, VIP, SPECIAL and ACL production scenarios were not run because no cleanup-safe production fixture exists.
+- No production News documents were created or modified.
+- Vercel frontend deployment remains pending the user's manual Git push to `main`.
 
 ## 4. Current Architecture
 
@@ -213,6 +258,10 @@ Important collections/documents:
 - `systemConfig/root`: ROOT lock/configuration used by the trusted System Role tooling. It is not client-writable.
 - `calendarImports/{importId}`: import metadata, including source column metadata and validation report.
 - `calendarImports/{importId}/entries/{entryId}`: normalized calendar row with `sourceFields`, `search` and `range` representations.
+- `newsArticles/{articleId}`: News article content, publication state, category and access policy metadata.
+- `newsCategories/{categoryId}`: News category metadata and inherited access policy.
+- `newsAcl/{aclId}`: trusted Special ACL entries for user, group, article or category scope.
+- `contentEntitlements/{uid}` and `newsGroups/{groupId}`: entitlement/group inputs used by trusted News read authorization when present.
 
 ## 5. System Roles
 
@@ -397,11 +446,15 @@ Latest verified results:
 - `npm run test:authorization`: PASS.
 - `npm run test:rbac`: PASS.
 - `npm run test:system-role-tool`: PASS.
-- `npm run test:rules`: PASS, 73 assertions in the Firestore emulator.
+- `npm run test:rules`: PASS, 81 assertions in the Firestore emulator.
 - `npm run test:functions`: PASS.
+- `npm run test:functions:news:emulator`: PASS.
+- `npm run test:functions:emulator`: PASS.
 - `npm run check:functions`: PASS.
 - `npm run test:frontend-rbac`: PASS.
+- `npm run test:frontend-news`: PASS.
 - `npm run build`: PASS. Vite produced `dist`; only a bundle-size warning was reported.
+- News integration and security scenarios: PASS in the Functions/Firestore emulators.
 - Phase 7B production smoke test: PASS, manually verified with ROOT_ADMIN and a USER test account.
 - `git diff --check`: PASS; Git emitted only line-ending normalization warnings.
 
@@ -412,7 +465,11 @@ The Rules test uses the local emulator and does not mutate production Firebase d
 1. A new user does not automatically receive a materialized authorization document because no auth-user creation trigger is deployed. Until a trusted rebuild runs, the frontend falls back to public permissions.
 2. Calendar export cannot be fully protected while the underlying calendar data is public-readable.
 3. If propagation is interrupted after a role change, a consistency check/rebuild is required.
-4. News Module 2 is designed but not implemented, deployed or populated with production data.
+4. News has no browser E2E test yet.
+5. News has no VIP entitlement workflow or group membership workflow yet.
+6. News has no production documents. Only read-only production smoke tests have been performed.
+7. Vercel frontend deployment is pending the user's manual push to `main`.
+8. News mutation/lifecycle/VIP/SPECIAL/ACL production smoke tests remain pending until a cleanup-safe fixture workflow is available.
 
 ## 14. Production Rollout — CURRENT RBAC SCOPE COMPLETE
 
@@ -423,14 +480,20 @@ The Rules test uses the local emulator and does not mutate production Firebase d
 - [x] Verify assignment persistence across USER logout/login.
 - [x] Verify ROOT_ADMIN protection.
 - [x] Current frontend deployed through Vercel.
+- [x] Phase 8.5A News pre-deployment review.
+- [x] News callable Functions deployed to Firebase.
+- [x] News Firestore indexes deployed.
+- [ ] News frontend deployed to the existing Vercel project `lichvannien`.
 
-The Phase 8 News implementation and all News production rollout steps remain pending.
+News backend deployment and read-only smoke checks are complete. The frontend will be deployed automatically by Vercel after the manual push to `main`.
 
-## 15. Modules Not Yet Implemented
+## 15. Module Status
 
 ### Module 2 — News
 
-Not implemented. Public news, VIP1/VIP2/VIP3 access, special ACLs, news management and approval workflows are not present as a completed module.
+Implemented through Phase 8.4. News callable Functions and indexes are deployed, while the frontend remains pending push to `main`. No production News documents exist.
+
+Not yet implemented or completed: VIP entitlement workflow, group membership workflow, browser E2E coverage, Vercel frontend deployment for the current News source and mutation production smoke testing.
 
 ### Module 3 — Quiz
 
@@ -438,7 +501,7 @@ Not implemented. Question bank, exam generation, practice mode, exam mode, resul
 
 ## 16. Future Phases
 
-- Phase 8 — Module 2: News module and its access/ACL policy.
+- Phase 8.5 — News Production Deployment & Smoke Test (Firebase complete; Vercel pending push).
 - Phase 9 — Module 3: Quiz, practice and exam workflows.
 - Phase 10 — Approval and audit workflows.
 - Phase 11 — Final security audit and Rules review.
@@ -446,9 +509,9 @@ Not implemented. Question bank, exam generation, practice mode, exam mode, resul
 
 These are roadmap proposals, not completed features.
 
-Roadmap alignment note: Phase 7A and Phase 7B are the completed Custom Role
-assignment and production verification work. Therefore the next feature phase
-is Phase 8 - Module 2: News; the older Phase 7 News label above is superseded.
+Roadmap alignment note: Phase 7A and Phase 7B are completed and production
+verified. Phase 8.1-8.5A are completed, and Phase 8.5B Firebase deployment is complete.
+The next operational step is manual Git push to `main`, followed by Vercel automatic frontend deployment.
 
 ## DO NOT BREAK
 
@@ -489,17 +552,18 @@ is Phase 8 - Module 2: News; the older Phase 7 News label above is superseded.
 
 ## NEXT ACTION
 
-Current status: Phase 8 News architecture design completed; implementation has not started.
+Current status: Phase 8.5B — Firebase deployed; Vercel frontend pending push to `main`.
 
-Next phase: Phase 8.1 - News Access Contract + Trusted Read Authorization.
+Next step: manually commit and push reviewed changes to `main`; Vercel will deploy the connected existing project.
 
-Before implementation, explicitly approve the News data model, public/VIP access policy, special ACL boundaries, server-side authorization requirements and Rules impact.
+No production News data has been created. Read-only production smoke tests passed; mutation smoke tests remain pending.
 
 ## Final Review Notes
 
 - File updated: `docs/PROJECT_STATUS.md`.
 - All requested status sections are included.
-- Current phase is recorded as `Phase 8 - News Foundation Design`.
-- Phase 7A and 7B production results are recorded separately from local regression results.
+- Current phase is recorded as `Phase 8.5B — Firebase deployed; Vercel pending push`.
+- Phase 7A and 7B production results are recorded separately from News production deployment results.
+- Phase 8.1-8.5A are completed; Phase 8.5B Firebase deployment is complete and frontend deployment awaits manual Git push.
 - Known limitations and rollout checklist are recorded.
 - No application code, Firestore Rules, Firebase data, deployment or Git history was changed by this documentation task.

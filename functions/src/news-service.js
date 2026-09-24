@@ -35,7 +35,8 @@ function assertAllowedKeys(data, allowed) {
 function normalizeListPayload(data) {
   assertAllowedKeys(data || {}, ['categoryId', 'limit'])
   const categoryId = data?.categoryId
-  if (categoryId !== undefined && (typeof categoryId !== 'string' || !categoryId.trim())) {
+  if (categoryId !== undefined && categoryId !== null
+    && (typeof categoryId !== 'string' || !categoryId.trim())) {
     invalidArgument('categoryId must be a non-empty string when provided.')
   }
   const limit = data?.limit === undefined ? 20 : data.limit
