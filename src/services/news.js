@@ -80,7 +80,9 @@ export function setNewsAccessPolicy(articleId, accessPolicy) {
 }
 
 export function createNewsCategory({ name, slug, description, defaultAccessPolicy }) {
-  return callNewsFunction('createNewsCategory', { name, slug, description, defaultAccessPolicy })
+  const payload = { name, description, defaultAccessPolicy }
+  if (typeof slug === 'string' && slug.trim()) payload.slug = slug.trim()
+  return callNewsFunction('createNewsCategory', payload)
 }
 
 export function updateNewsCategory({ categoryId, name, slug, description, defaultAccessPolicy, status }) {

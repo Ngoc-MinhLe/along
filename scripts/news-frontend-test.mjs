@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
+import { makeSlug } from '../src/utils/slug.js'
 
 const service = fs.readFileSync('src/services/news.js', 'utf8')
 const app = fs.readFileSync('src/App.jsx', 'utf8')
@@ -23,5 +24,10 @@ assert.doesNotMatch(management, /<input[^>]*(articleId|categoryId|resourceId|pri
 assert.match(management, /SearchableSelect/)
 assert.match(fs.readFileSync('src/pages/NewsListPage.jsx', 'utf8'), /SearchableSelect/)
 for (const mode of ['PUBLIC', 'VIP', 'SPECIAL', 'INHERIT']) assert.match(management, new RegExp(`value="${mode}"`))
+assert.equal(makeSlug('Tin tức Hải Phòng'), 'tin-tuc-hai-phong')
+assert.equal(makeSlug('Thông báo'), 'thong-bao')
+assert.equal(makeSlug('Hoạt động nhà trường'), 'hoat-dong-nha-truong')
+assert.match(management, /categorySlugEdited/)
+assert.match(service, /if \(typeof slug === 'string' && slug\.trim\(\)\) payload\.slug/)
 
 console.log('News frontend test PASS: callable service, routes, permission guard and no direct News mutation verified.')

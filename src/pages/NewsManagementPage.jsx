@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '../auth/PermissionContext'
 import { PERMISSIONS } from '../services/rbac/permissions'
 import SearchableSelect from '../components/SearchableSelect'
+import { makeSlug } from '../utils/slug'
 import {
   createNewsArticle, updateNewsArticle, publishNewsArticle, unpublishNewsArticle,
   setNewsAccessPolicy, createNewsCategory, updateNewsCategory, deleteNewsCategory,
@@ -76,6 +77,7 @@ export default function NewsManagementPage() {
   const canPublish = hasPermission(PERMISSIONS.NEWS_PUBLISH)
   const [article, setArticle] = useState(emptyArticle)
   const [category, setCategory] = useState(emptyCategory)
+  const [categorySlugEdited, setCategorySlugEdited] = useState(false)
   const [acl, setAcl] = useState(emptyAcl)
   const [lifecycleId, setLifecycleId] = useState('')
   const [accessId, setAccessId] = useState('')
@@ -90,6 +92,7 @@ export default function NewsManagementPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [selectorRefreshKey, setSelectorRefreshKey] = useState(0)
 
   const canReadManagementResources = canCreate || canUpdate || canDelete || canPublish
   const aclResourceOptions = useMemo(() => acl.scope === 'ARTICLE' ? articles : categories, [acl.scope, articles, categories])
@@ -120,11 +123,45 @@ export default function NewsManagementPage() {
     }
     loadSelectors()
     return () => { cancelled = true }
-  }, [canCreate, canUpdate, canDelete, canPublish, canReadManagementResources])
+  }, [canCreate, canUpdate, canDelete, canPublish, canReadManagementResources, selectorRefreshKey])
 
   async function runAction(action, successMessage) {
     setBusy(true); setMessage(''); setError('')
-    try { await action(); setMessage(successMessage) } catch (actionError) { setError(actionError.message) } finally { setBusy(false) }
+    try { await action(); setMessage(successMessage) } catch (actionError) { setError(friendlyNewsError(actionError)) } finally { setBusy(false) }
+  }
+
+  function updateCategoryName(name) {
+    setCategory((current) => ({ ...current, name, slug: categorySlugEdited ? current.slug : makeSlug(name) }))
+  }
+
+  function updateCategorySlug(slug) {
+    setCategory((current) => ({ ...current, slug }))
+    setCategorySlugEdited(true)
+  }
+
+  async function createCategory() {
+    const slug = categorySlugEdited ? category.slug.trim() : makeSlug(category.name)
+    if (!slug) {
+      setMessage('')
+      setError('Không thể tạo chuyên mục: hãy nhập tên có ít nhất một chữ cái hoặc chữ số, hoặc nhập Đường dẫn (Slug) hợp lệ.')
+      return
+    }
+    await runAction(async () => {
+      await createNewsCategory({ ...category, slug, defaultAccessPolicy: categoryPolicy() })
+      setCategory(emptyCategory)
+      setCategorySlugEdited(false)
+      setSelectorRefreshKey((value) => value + 1)
+    }, 'Đã tạo chuyên mục và cập nhật danh sách.')
+  }
+
+  function friendlyNewsError(actionError) {
+    const code = actionError?.code || ''
+    const rawMessage = actionError?.message || ''
+    if (code === 'already-exists') return 'Chuyên mục này đã tồn tại. Vui lòng dùng tên hoặc đường dẫn khác.'
+    if (code === 'permission-denied') return 'Bạn không có quyền thực hiện thao tác này.'
+    if (code === 'invalid-argument' && /slug/i.test(rawMessage)) return 'Đường dẫn (Slug) chưa hợp lệ. Hãy dùng chữ cái, chữ số và dấu gạch ngang.'
+    if (code === 'invalid-argument') return 'Thông tin chuyên mục chưa hợp lệ. Vui lòng kiểm tra lại các trường bắt buộc.'
+    return 'Không thể thực hiện thao tác. Vui lòng thử lại.'
   }
 
   async function selectArticle(articleId, target = 'edit') {
@@ -237,15 +274,15 @@ export default function NewsManagementPage() {
     {(canCreate || canUpdate || canDelete) && <section id="news-category-management" className="news-management-card news-advanced-card">
       <SectionHeader icon="▣" title="Quản lý chuyên mục" subtitle="Chuyên mục giúp phân loại các bài viết theo chủ đề." tone="advanced" />
       <div className="news-form-grid">
-        <SearchableSelect label="Chuyên mục cần sửa/xóa" value={category.categoryId} options={categories} onChange={(value) => { const selected = categories.find((item) => item.id === value); setCategory({ ...category, categoryId: value, name: selected?.name || '', description: selected?.description || '', status: selected?.status || 'active' }) }} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục. Hãy tạo chuyên mục đầu tiên." loading={selectorLoading} />
-        <Field label="Tên chuyên mục"><input value={category.name} onChange={(event) => setCategory({ ...category, name: event.target.value })} /></Field>
-        <Field label="Đường dẫn (Slug)" help="Đường dẫn thân thiện cho chuyên mục."><input value={category.slug} onChange={(event) => setCategory({ ...category, slug: event.target.value })} /></Field>
+        <SearchableSelect label="Chuyên mục cần sửa/xóa" value={category.categoryId} options={categories} onChange={(value) => { const selected = categories.find((item) => item.id === value); setCategory({ ...category, categoryId: value, name: selected?.name || '', slug: selected?.slug || '', description: selected?.description || '', status: selected?.status || 'active' }); setCategorySlugEdited(false) }} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục. Hãy tạo chuyên mục đầu tiên." loading={selectorLoading} />
+        <Field label="Tên chuyên mục"><input value={category.name} onChange={(event) => updateCategoryName(event.target.value)} /></Field>
+        <Field label="Đường dẫn (Slug) – tự tạo" help="Đường dẫn được tự tạo từ tên chuyên mục. Bạn có thể chỉnh nếu cần."><input value={category.slug} onChange={(event) => updateCategorySlug(event.target.value)} /></Field>
         <Field label="Mô tả"><textarea rows="2" value={category.description} onChange={(event) => setCategory({ ...category, description: event.target.value })} /></Field>
         <AccessFields value={category} onChange={setCategory} allowInherit={false} />
         <Field label="Trạng thái"><select value={category.status} onChange={(event) => setCategory({ ...category, status: event.target.value })}><option value="active">Đang hoạt động</option><option value="disabled">Đã tắt</option></select></Field>
       </div>
       {!selectorLoading && !categories.length && <EmptyState title="Chưa có chuyên mục." action={<button className="news-inline-link" type="button" onClick={scrollToCategoryManagement}>Hãy tạo chuyên mục đầu tiên</button>}>Chuyên mục giúp bạn sắp xếp bài viết theo chủ đề.</EmptyState>}
-      <div className="news-action-row">{canCreate && <button className="admin-primary-button" type="button" disabled={busy} onClick={() => runAction(() => createNewsCategory({ ...category, defaultAccessPolicy: categoryPolicy() }), 'Đã tạo chuyên mục.')}>Tạo chuyên mục</button>}{canUpdate && <button className="admin-secondary-button" type="button" disabled={busy || !category.categoryId} onClick={() => runAction(() => updateNewsCategory({ ...category, defaultAccessPolicy: categoryPolicy() }), 'Đã cập nhật chuyên mục.')}>Cập nhật chuyên mục</button>}{canDelete && <button className="admin-danger-button" type="button" disabled={busy || !category.categoryId} onClick={() => runAction(() => deleteNewsCategory(category.categoryId), 'Đã xóa chuyên mục.')}>Xóa chuyên mục</button>}</div>
+      <div className="news-action-row">{canCreate && <button className="admin-primary-button" type="button" disabled={busy} onClick={createCategory}>Tạo chuyên mục</button>}{canUpdate && <button className="admin-secondary-button" type="button" disabled={busy || !category.categoryId} onClick={() => runAction(() => updateNewsCategory({ ...category, defaultAccessPolicy: categoryPolicy() }), 'Đã cập nhật chuyên mục.')}>Cập nhật chuyên mục</button>}{canDelete && <button className="admin-danger-button" type="button" disabled={busy || !category.categoryId} onClick={() => runAction(() => deleteNewsCategory(category.categoryId), 'Đã xóa chuyên mục.')}>Xóa chuyên mục</button>}</div>
     </section>}
   </section>
 }
