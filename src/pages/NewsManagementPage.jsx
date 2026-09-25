@@ -119,6 +119,9 @@ export default function NewsManagementPage() {
   const [users, setUsers] = useState([])
   const [groups, setGroups] = useState([])
   const [selectorLoading, setSelectorLoading] = useState(false)
+  const [articleSearch, setArticleSearch] = useState('')
+  const [articleSearchLoading, setArticleSearchLoading] = useState(false)
+  const [articleSearchError, setArticleSearchError] = useState('')
   const [selectorError, setSelectorError] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -135,15 +138,13 @@ export default function NewsManagementPage() {
     async function loadSelectors() {
       setSelectorLoading(true); setSelectorError('')
       try {
-        const [categoryResult, articleResult, userResult, groupResult] = await Promise.all([
+        const [categoryResult, userResult, groupResult] = await Promise.all([
           listNewsCategories({ limit: 50, includeDisabled: canCreate || canUpdate || canDelete }),
-          canUpdate || canPublish ? listNewsManagement({ limit: 50 }) : Promise.resolve({ items: [] }),
           canUpdate ? listNewsUsers({ limit: 50 }) : Promise.resolve({ items: [] }),
           canUpdate ? listNewsGroups({ limit: 50 }) : Promise.resolve({ items: [] }),
         ])
         if (cancelled) return
         setCategories(categoryResult.items || [])
-        setArticles(articleResult.items || [])
         setUsers(userResult.items || [])
         setGroups(groupResult.items || [])
       } catch (loadError) {
@@ -155,6 +156,27 @@ export default function NewsManagementPage() {
     loadSelectors()
     return () => { cancelled = true }
   }, [canCreate, canUpdate, canDelete, canPublish, canReadManagementResources, selectorRefreshKey])
+
+  useEffect(() => {
+    if (!canUpdate && !canPublish) {
+      setArticles([])
+      return undefined
+    }
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      setArticleSearchLoading(true)
+      setArticleSearchError('')
+      try {
+        const result = await listNewsManagement({ query: articleSearch.trim(), limit: 20 })
+        if (!cancelled) setArticles(result.items || [])
+      } catch (loadError) {
+        if (!cancelled) setArticleSearchError(loadError.message)
+      } finally {
+        if (!cancelled) setArticleSearchLoading(false)
+      }
+    }, articleSearch.trim() ? 350 : 0)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [articleSearch, canUpdate, canPublish, selectorRefreshKey])
 
   async function runAction(action, successMessage) {
     setBusy(true); setMessage(''); setError('')
@@ -360,10 +382,15 @@ export default function NewsManagementPage() {
     </section>}
 
     {(canUpdate || canPublish) && <section className="news-management-card news-basic-card">
-      <SectionHeader icon="≡" title="Danh sách bài viết" subtitle="Chọn một bài viết đã tồn tại để xem hoặc chỉnh sửa. Đây không phải bước bắt buộc khi tạo bài mới." />
-      <SearchableSelect label="Chọn bài viết cần chỉnh sửa" value={selectedArticleId} options={articles} onChange={selectArticle} getLabel={articleLabel} getMeta={articleMeta} placeholder="Tìm bài viết theo tiêu đề..." noDataMessage="Chưa có bài viết nào." loading={selectorLoading} />
-      {!selectorLoading && !articles.length && <EmptyState title="Chưa có bài viết nào." action={canCreate ? <button className="news-inline-link" type="button" onClick={() => document.querySelector('.news-basic-card')?.scrollIntoView({ behavior: 'smooth' })}>Tạo bài viết mới ở phần phía trên</button> : null}>Danh sách sẽ xuất hiện sau khi có bài viết được lưu.</EmptyState>}
-      {!selectorLoading && articles.length > 0 && <div className="news-article-list">{articles.map((item) => <button className={`news-article-list-row${item.id === selectedArticleId ? ' selected' : ''}`} type="button" key={item.id} onClick={() => selectArticle(item.id)}><span><strong>{articleLabel(item)}</strong><small>{articleMeta(item)}</small></span><span>Chỉnh sửa →</span></button>)}</div>}
+      <SectionHeader icon="≡" title="Danh sách bài viết" subtitle="Tìm một bài viết đã tồn tại rồi mở phần chỉnh sửa. Chỉ tải tối đa 20 kết quả mỗi lần tìm." />
+      <div className="news-article-search-toolbar">
+        <label className="news-article-search-field"><span>Tìm bài viết theo tiêu đề</span><input type="search" value={articleSearch} onChange={(event) => setArticleSearch(event.target.value)} placeholder="Nhập tiêu đề cần tìm..." /></label>
+        <span className="news-article-search-status">{articleSearchLoading ? 'Đang tìm...' : 'Tìm kiếm phía máy chủ'}</span>
+      </div>
+      <p className="news-search-limit-note">Kết quả được tải giới hạn theo từng lần tìm, không tải toàn bộ bộ sưu tập bài viết về trình duyệt. Lọc trạng thái/chuyên mục và phân trang cần backend bổ sung contract.</p>
+      {articleSearchError && <p className="admin-error" role="alert">Không thể tìm bài viết. Vui lòng thử lại: {articleSearchError}</p>}
+      {!articleSearchLoading && !articleSearchError && !articles.length && <EmptyState title={articleSearch ? 'Không tìm thấy bài viết phù hợp.' : 'Chưa có bài viết nào.'} action={!articleSearch && canCreate ? <button className="news-inline-link" type="button" onClick={() => document.querySelector('.news-basic-card')?.scrollIntoView({ behavior: 'smooth' })}>Tạo bài viết mới ở phần phía trên</button> : null}>{articleSearch ? 'Hãy thử từ khóa khác.' : 'Danh sách sẽ xuất hiện sau khi có bài viết được lưu.'}</EmptyState>}
+      {!articleSearchLoading && articles.length > 0 && <div className="news-article-list">{articles.map((item) => <button className={`news-article-list-row${item.id === selectedArticleId ? ' selected' : ''}`} type="button" key={item.id} onClick={() => selectArticle(item.id)}><span><strong>{articleLabel(item)}</strong><small>{articleMeta(item)}</small></span><span>Chỉnh sửa →</span></button>)}</div>}
       {selectedArticleId && editingArticle.articleId && <div className="news-article-edit-panel">
         <div className="news-edit-panel-heading"><strong>Chỉnh sửa bài viết đã chọn</strong><span className={`news-status-badge ${editingArticle.status}`}>{editingArticle.status === 'published' ? 'Đã xuất bản' : 'Nháp — chưa hiển thị công khai'}</span></div>
         <div className="news-form-grid">
