@@ -285,6 +285,7 @@ export default function NewsManagementPage() {
         setAccessMode(selected.accessPolicy.mode)
         setAccessVipLevel(selected.accessPolicy.minVipLevel || 1)
       }
+      window.requestAnimationFrame(() => document.getElementById('news-article-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     } catch (loadError) {
       setError(friendlyNewsError(loadError))
     }
@@ -392,7 +393,7 @@ export default function NewsManagementPage() {
       {!articleSearchLoading && !articleSearchError && !articles.length && <EmptyState title={articleSearch ? 'Không tìm thấy bài viết phù hợp.' : 'Chưa có bài viết nào.'} action={!articleSearch && canCreate ? <button className="news-inline-link" type="button" onClick={() => document.querySelector('.news-basic-card')?.scrollIntoView({ behavior: 'smooth' })}>Tạo bài viết mới ở phần phía trên</button> : null}>{articleSearch ? 'Hãy thử từ khóa khác.' : 'Danh sách sẽ xuất hiện sau khi có bài viết được lưu.'}</EmptyState>}
       {!articleSearchLoading && articles.length > 0 && <div className="news-article-list">{articles.map((item) => <button className={`news-article-list-row${item.id === selectedArticleId ? ' selected' : ''}`} type="button" key={item.id} onClick={() => selectArticle(item.id)}><span><strong>{articleLabel(item)}</strong><small>{articleMeta(item)}</small></span><span>Chỉnh sửa →</span></button>)}</div>}
       {selectedArticleId && editingArticle.articleId && <div className="news-article-edit-panel">
-        <div className="news-edit-panel-heading"><strong>Chỉnh sửa bài viết đã chọn</strong><span className={`news-status-badge ${editingArticle.status}`}>{editingArticle.status === 'published' ? 'Đã xuất bản' : 'Nháp — chưa hiển thị công khai'}</span></div>
+        <div id="news-article-editor" className="news-edit-panel-heading"><div><strong>Đang chỉnh sửa: {editingArticle.title || 'Bài viết'}</strong><p>Cập nhật nội dung bài viết đã tồn tại.</p></div><span className={`news-status-badge ${editingArticle.status}`}>{editingArticle.status === 'published' ? 'Đã xuất bản' : 'Nháp — chưa hiển thị công khai'}</span></div>
         <div className="news-form-grid">
           <Field label="Tiêu đề bài viết *"><input value={editingArticle.title} onChange={(event) => updateEditingTitle(event.target.value)} disabled={!canUpdate} /></Field>
           <div><GeneratedSlug value={editingArticle.slug} customized={editingSlugEdited} onCustomize={() => canUpdate && setShowEditingSlugEditor(true)} />{showEditingSlugEditor && <Field label="Đường dẫn tùy chỉnh"><input value={editingArticle.slug} onChange={(event) => updateEditingSlug(event.target.value)} disabled={!canUpdate} /></Field>}</div>
@@ -400,7 +401,7 @@ export default function NewsManagementPage() {
           <Field label="Mô tả ngắn (tùy chọn)"><textarea rows="3" value={editingArticle.excerpt} onChange={(event) => setEditingArticle({ ...editingArticle, excerpt: event.target.value })} disabled={!canUpdate} /></Field>
           <ContentEditor value={editingArticle.content} onChange={(content) => setEditingArticle({ ...editingArticle, content })} disabled={!canUpdate} />
         </div>
-        <div className="news-workflow-actions">{canUpdate && <button className="admin-primary-button" type="button" disabled={busy} onClick={saveEditing}>Lưu cập nhật</button>}{canPublish && editingArticle.status !== 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={publishEditing}>Đăng bài</button>}{canPublish && editingArticle.status === 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={unpublishEditing}>Gỡ xuất bản</button>}<button className="news-inline-link" type="button" onClick={() => selectArticle('')}>Đóng chỉnh sửa</button></div>
+        <div className="news-workflow-actions">{canUpdate && <button className="admin-primary-button" type="button" disabled={busy} onClick={saveEditing}>Lưu thay đổi</button>}{canPublish && editingArticle.status !== 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={publishEditing}>Đăng bài</button>}{canPublish && editingArticle.status === 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={unpublishEditing}>Gỡ xuất bản</button>}<button className="admin-secondary-button" type="button" disabled={busy} onClick={() => selectArticle('')}>Hủy</button></div>
       </div>}
     </section>}
 
