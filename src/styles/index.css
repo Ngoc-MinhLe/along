@@ -65,6 +65,11 @@ a { color: inherit; text-decoration: none; }
 .news-status-badge.draft { color: #765f32; background: #fff3d2; }
 .news-preview-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgba(18, 61, 55, .46); }
 .news-preview-panel { width: min(760px, 94vw); max-height: 90vh; overflow: auto; border-radius: 14px; background: #fff; box-shadow: 0 24px 70px rgba(18, 61, 55, .22); }
+.news-confirm-backdrop { position: fixed; inset: 0; z-index: 21; display: grid; place-items: center; padding: 24px; background: rgba(18, 61, 55, .46); }
+.news-confirm-panel { width: min(520px, 94vw); padding: 24px; border-radius: 14px; background: #fff; box-shadow: 0 24px 70px rgba(18, 61, 55, .22); }
+.news-confirm-panel h3 { margin: 0 0 14px; color: #315a52; }
+.news-confirm-panel p { color: #57746c; font-size: 12px; line-height: 1.6; }
+.news-confirm-warning { padding: 11px 13px; border-radius: 8px; color: #765f32 !important; background: #fff8e8; }
 .news-preview-header { display: flex; justify-content: space-between; gap: 16px; align-items: start; padding: 22px 24px; border-bottom: 1px solid #e1eae5; }
 .news-preview-header h3 { margin: 0; color: #315a52; font-size: 21px; }
 .news-preview-header p { margin: 7px 0 0; color: #829690; font-size: 11px; }

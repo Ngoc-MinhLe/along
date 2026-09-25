@@ -9,7 +9,7 @@ const {
 const { ACCESS_MODES, normalizeAccessPolicy } = require('./news-service')
 const { invokeAudited } = require('./audit')
 
-const ARTICLE_STATUSES = new Set(['draft', 'published'])
+const ARTICLE_STATUSES = new Set(['draft', 'published', 'archived'])
 const CATEGORY_STATUSES = new Set(['active', 'disabled'])
 const ACL_SCOPES = new Set(['ARTICLE', 'CATEGORY'])
 const PRINCIPAL_TYPES = new Set(['USER', 'GROUP'])
@@ -247,6 +247,10 @@ function articleData(snapshot, articleId) {
   return { id: articleId, ...data }
 }
 
+function assertArticleNotArchived(article) {
+  if (article.status === 'archived') failedPrecondition('The News article is archived and cannot be modified.')
+}
+
 async function activeCategory(categoryId, db, transaction = null) {
   if (!categoryId) return null
   const snapshot = transaction
@@ -312,6 +316,7 @@ async function updateNewsArticle(actor, data, db = adminDb) {
   const ref = articleRef(db, payload.articleId)
   await db.runTransaction(async (transaction) => {
     const current = await readArticle(payload.articleId, db, transaction)
+    assertArticleNotArchived(current)
     const currentCategoryId = current.categoryId || null
     const nextCategoryId = Object.prototype.hasOwnProperty.call(payload.fields, 'categoryId')
       ? payload.fields.categoryId
@@ -329,6 +334,7 @@ async function setNewsArticlePublished(actor, data, published, db = adminDb) {
   const articleId = normalizeReferenceId(data.articleId, 'articleId')
   await db.runTransaction(async (transaction) => {
     const current = await readArticle(articleId, db, transaction)
+    assertArticleNotArchived(current)
     const category = current.categoryId ? await activeCategory(current.categoryId, db, transaction) : null
     validateArticleCategory(current, category)
     const next = published
@@ -344,6 +350,24 @@ async function setNewsArticlePublished(actor, data, published, db = adminDb) {
   }
 }
 
+async function archiveNewsArticle(actor, data, db = adminDb) {
+  requirePermission(actor, 'news.delete')
+  assertAllowedKeys(data, ['articleId'], ['articleId'])
+  const articleId = normalizeReferenceId(data.articleId, 'articleId')
+  await db.runTransaction(async (transaction) => {
+    const current = await readArticle(articleId, db, transaction)
+    if (current.status === 'archived') failedPrecondition('The News article is already archived.')
+    const now = Timestamp.now()
+    transaction.update(articleRef(db, articleId), {
+      status: 'archived',
+      archivedAt: now,
+      archivedBy: actor.uid,
+      updatedAt: now,
+    })
+  })
+  return { ok: true, operation: 'archiveNewsArticle', articleId, status: 'archived' }
+}
+
 async function setNewsAccessPolicy(actor, data, db = adminDb) {
   requirePermission(actor, 'news.update')
   assertAllowedKeys(data, ['articleId', 'accessPolicy'], ['articleId', 'accessPolicy'])
@@ -351,6 +375,7 @@ async function setNewsAccessPolicy(actor, data, db = adminDb) {
   const accessPolicy = normalizeManagedAccessPolicy(data.accessPolicy)
   await db.runTransaction(async (transaction) => {
     const current = await readArticle(articleId, db, transaction)
+    assertArticleNotArchived(current)
     const category = current.categoryId ? await activeCategory(current.categoryId, db, transaction) : null
     validateArticleCategory({ ...current, accessPolicy }, category)
     transaction.update(articleRef(db, articleId), { accessPolicy, updatedAt: Timestamp.now() })
@@ -407,6 +432,7 @@ async function deleteNewsCategory(actor, data, db = adminDb) {
 async function readAclResource(transaction, payload, db, { requireSpecial = true } = {}) {
   if (payload.scope === 'ARTICLE') {
     const article = await readArticle(payload.resourceId, db, transaction)
+    assertArticleNotArchived(article)
     const category = article.categoryId ? await readCategory(article.categoryId, db, transaction) : null
     validateArticleCategory(article, category)
     if (requireSpecial && category?.status !== 'active') {
@@ -502,6 +528,7 @@ module.exports = {
   publishNewsArticle: (actor, data, db) => setNewsArticlePublished(actor, data, true, db),
   unpublishNewsArticle: (actor, data, db) => setNewsArticlePublished(actor, data, false, db),
   setNewsAccessPolicy,
+  archiveNewsArticle,
   createNewsCategory,
   updateNewsCategory,
   deleteNewsCategory,

@@ -23,6 +23,7 @@ exports.listNewsUsers = newsFunctions.listNewsUsers
 exports.listNewsGroups = newsFunctions.listNewsGroups
 exports.createNewsArticle = newsFunctions.createNewsArticle
 exports.updateNewsArticle = newsFunctions.updateNewsArticle
+exports.archiveNewsArticle = newsFunctions.archiveNewsArticle
 exports.publishNewsArticle = newsFunctions.publishNewsArticle
 exports.unpublishNewsArticle = newsFunctions.unpublishNewsArticle
 exports.setNewsAccessPolicy = newsFunctions.setNewsAccessPolicy

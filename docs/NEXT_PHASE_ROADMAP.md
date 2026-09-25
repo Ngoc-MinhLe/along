@@ -39,6 +39,23 @@ Production closure
 Đã đối chiếu:
 
 - `docs/PROJECT_STATUS.md`
+
+## Phase 10.9 Status
+
+- Phase 10.9 - News Article Delete / Archive Foundation: **COMPLETED locally**.
+- Phase 10.9A - Archive Review and Production Readiness: **COMPLETED locally,
+  CONDITIONAL/BLOCKED for production**.
+- Next proposed phase: fix and test the delete-only News management UX, then
+  run a separate archive deployment/readiness checkpoint.
+- The archive path is a trusted `news.delete` soft-delete with audit coverage
+  and retained article/ACL history. Restore, retention and permanent purge are
+  not part of Phase 10.9.
+- Review finding: the backend supports an actor with only `news.delete`, and
+  the effect list loader runs for that actor, but the frontend list/editor
+  render guard currently requires `news.update` or `news.publish`. This is a
+  UX visibility defect, not a backend authorization bypass.
+- Review warning: management search is bounded and not globally paginated;
+  expanding that contract is outside Phase 10.9A.
 - `src/services/rbac/*`
 - `src/pages/Admin*.jsx`, `src/layouts/AdminLayout.jsx`, `src/App.jsx`
 - `functions/src/*`

@@ -250,6 +250,26 @@ async function main() {
   await db.doc('contentEntitlements/news-editor').update({ newsLevel: 2 })
   assert.equal((await call('getNewsArticle', editorToken, { articleId: created.articleId })).article.id, created.articleId)
 
+  // Archive is a trusted soft-delete: it removes public access while retaining
+  // article history and ACL data for management/audit purposes.
+  await denied(() => call('archiveNewsArticle', noReadToken, { articleId: created.articleId }), 'permission-denied')
+  await denied(() => call('archiveNewsArticle', adminToken, {
+    actorUid: 'forged', articleId: created.articleId,
+  }), 'invalid-argument')
+  const archived = await call('archiveNewsArticle', adminToken, { articleId: created.articleId })
+  assert.equal(archived.status, 'archived')
+  const archivedSnapshot = await db.doc(`newsArticles/${created.articleId}`).get()
+  assert.equal(archivedSnapshot.data().status, 'archived')
+  assert.equal(archivedSnapshot.data().archivedBy, 'news-admin')
+  assert.equal(typeof archivedSnapshot.data().archivedAt.toMillis, 'function')
+  await denied(() => call('getNewsArticle', null, { articleId: created.articleId }), 'not-found')
+  const managementList = await call('listNewsManagement', adminToken, { query: 'Updated Managed', limit: 20 })
+  assert.equal(managementList.items.find((item) => item.id === created.articleId)?.status, 'archived')
+  await denied(() => call('archiveNewsArticle', adminToken, { articleId: created.articleId }), 'failed-precondition')
+  await denied(() => call('updateNewsArticle', editorToken, {
+    articleId: created.articleId, title: 'Archived article must not change',
+  }), 'failed-precondition')
+
   // Category, article ACL and group ACL mutations are server-side only.
   const specialCategory = await call('createNewsCategory', superToken, {
     name: 'Managed Special', defaultAccessPolicy: { mode: 'SPECIAL' },
@@ -310,7 +330,7 @@ async function main() {
   const auditEvents = (await db.collection('auditEvents').get()).docs.map((snapshot) => snapshot.data())
   for (const action of [
     'NEWS_ARTICLE_CREATED', 'NEWS_ARTICLE_UPDATED', 'NEWS_PUBLISHED',
-    'NEWS_UNPUBLISHED', 'NEWS_ACCESS_POLICY_CHANGED', 'NEWS_CATEGORY_CREATED',
+    'NEWS_UNPUBLISHED', 'NEWS_ARTICLE_ARCHIVED', 'NEWS_ACCESS_POLICY_CHANGED', 'NEWS_CATEGORY_CREATED',
     'NEWS_CATEGORY_UPDATED', 'NEWS_ACL_CHANGED',
   ]) {
     assert.ok(auditEvents.some((event) => event.action === action && event.result === 'SUCCESS'), action)

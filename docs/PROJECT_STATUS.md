@@ -1,6 +1,33 @@
 # PROJECT STATUS
 
-Last reviewed: 2026-09-24
+## Current Phase Snapshot
+
+- Phase 10.9 - News Article Delete / Archive Foundation: **COMPLETED locally**.
+- Phase 10.9A - Archive Review and Production Readiness: **COMPLETED locally,
+  CONDITIONAL/BLOCKED for production**.
+- Blocking finding: the News management list/editor is not rendered for an
+  actor who has only `news.delete`, even though the backend allows that actor
+  to archive. The minimum fix is a frontend render-guard change; no backend or
+  Firestore Rules change is indicated.
+- Next proposed phase: fix and test the delete-only News management UX, then
+  perform a separate archive deployment/readiness checkpoint.
+- The selected lifecycle model is trusted soft-delete/archive through
+  `archiveNewsArticle`; no hard-delete or cascade-delete path was added.
+- Archive requires the existing server-side `news.delete` permission, derives
+  the actor from Firebase Auth, writes an audit event, preserves article/ACL
+  history, and removes the article from public reads through the existing
+  published-status boundary.
+- Existing RBAC, authorization materialization, Firestore Rules, Module 1 and
+  News access policy were preserved.
+- Local functions, News emulator, RBAC, authorization, policy, frontend, Rules
+  and production build checks PASS; Phase 10.9A additionally found the
+  delete-only frontend visibility issue described above.
+- No Firebase/Vercel deployment, production data mutation, commit or push was
+  performed for Phase 10.9.
+- Known limitations: no restore workflow, no retention/purge policy, and no
+  browser E2E or production smoke test for archive.
+
+Last reviewed: 2026-09-25
 
 ## 1. Project Overview
 

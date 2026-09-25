@@ -247,7 +247,7 @@ async function getNewsArticle(actor, data, db = adminDb) {
 function managementArticleData(snapshot, articleId, { includeContent = false } = {}) {
   if (!snapshot.exists) notFound()
   const data = snapshot.data()
-  if (!data || data.id !== articleId || !['draft', 'published'].includes(data.status)) {
+  if (!data || data.id !== articleId || !['draft', 'published', 'archived'].includes(data.status)) {
     throw new HttpsError('failed-precondition', 'The News article is invalid.')
   }
   const policy = normalizeAccessPolicy(data.accessPolicy)

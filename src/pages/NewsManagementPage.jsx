@@ -5,6 +5,7 @@ import SearchableSelect from '../components/SearchableSelect'
 import { makeSlug } from '../utils/slug'
 import {
   createNewsArticle, updateNewsArticle, publishNewsArticle, unpublishNewsArticle,
+  archiveNewsArticle,
   setNewsAccessPolicy, createNewsCategory, updateNewsCategory, deleteNewsCategory,
   setNewsAclEntry, removeNewsAclEntry, listNewsManagement, getNewsManagementArticle,
   listNewsCategories, listNewsUsers, listNewsGroups,
@@ -21,7 +22,7 @@ function makePolicy(mode, minVipLevel) {
 }
 
 function statusLabel(status) {
-  return { active: 'Đang hoạt động', disabled: 'Đã tắt', draft: 'Nháp', published: 'Đã xuất bản' }[status] || status
+  return { active: 'Đang hoạt động', disabled: 'Đã tắt', draft: 'Nháp', published: 'Đã xuất bản', archived: 'Đã lưu trữ' }[status] || status
 }
 
 function policyLabel(policy) {
@@ -109,6 +110,7 @@ export default function NewsManagementPage() {
   const [editingError, setEditingError] = useState('')
   const [selectedArticleId, setSelectedArticleId] = useState('')
   const [previewArticle, setPreviewArticle] = useState(null)
+  const [archiveConfirmation, setArchiveConfirmation] = useState(null)
   const [category, setCategory] = useState(emptyCategory)
   const [categorySlugEdited, setCategorySlugEdited] = useState(false)
   const [showCategorySlugEditor, setShowCategorySlugEditor] = useState(false)
@@ -162,7 +164,7 @@ export default function NewsManagementPage() {
   }, [canCreate, canUpdate, canDelete, canPublish, canReadManagementResources, selectorRefreshKey])
 
   useEffect(() => {
-    if (!canUpdate && !canPublish) {
+    if (!canUpdate && !canPublish && !canDelete) {
       setArticles([])
       return undefined
     }
@@ -180,7 +182,7 @@ export default function NewsManagementPage() {
       }
     }, articleSearch.trim() ? 350 : 0)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [articleSearch, canUpdate, canPublish, selectorRefreshKey])
+  }, [articleSearch, canUpdate, canDelete, canPublish, selectorRefreshKey])
 
   useEffect(() => {
     if (!selectedArticleId || !editingArticle.articleId || editingLoading || !editorRef.current) return
@@ -347,6 +349,19 @@ export default function NewsManagementPage() {
     }, 'Đã chuyển bài viết về Nháp.')
   }
 
+  async function confirmArchive() {
+    const target = archiveConfirmation
+    if (!target) return
+    setArchiveConfirmation(null)
+    await runAction(async () => {
+      await archiveNewsArticle(target.articleId)
+      setSelectedArticleId('')
+      setEditingArticle(emptyArticle)
+      setEditingError('')
+      setSelectorRefreshKey((value) => value + 1)
+    }, 'Đã đưa bài viết vào lưu trữ.')
+  }
+
   function updateCategoryName(name) {
     setCategory((current) => ({ ...current, name, slug: categorySlugEdited ? current.slug : makeSlug(name) }))
   }
@@ -414,7 +429,7 @@ export default function NewsManagementPage() {
       <div className="news-workflow-actions"><button className="admin-secondary-button" type="button" disabled={busy} onClick={saveDraft}>Lưu nháp</button><button className="admin-secondary-button" type="button" disabled={busy} onClick={() => setPreviewArticle(draftArticle)}>Xem trước</button><button className="admin-primary-button" type="button" disabled={busy} onClick={publishDraft}>Đăng bài</button></div>
     </section>}
 
-    {(canUpdate || canPublish) && <section className="news-management-card news-basic-card">
+    {(canUpdate || canPublish || canDelete) && <section className="news-management-card news-basic-card">
       <SectionHeader icon="≡" title="Danh sách bài viết" subtitle="Tìm một bài viết đã tồn tại rồi mở phần chỉnh sửa. Chỉ tải tối đa 20 kết quả mỗi lần tìm." />
       <div className="news-article-search-toolbar">
         <label className="news-article-search-field"><span>Tìm bài viết theo tiêu đề</span><input type="search" value={articleSearch} onChange={(event) => setArticleSearch(event.target.value)} placeholder="Nhập tiêu đề cần tìm..." /></label>
@@ -427,15 +442,15 @@ export default function NewsManagementPage() {
       {!articleSearchLoading && !articleSearchError && !articles.length && <EmptyState title={articleSearch ? 'Không tìm thấy bài viết phù hợp.' : 'Chưa có bài viết nào.'} action={!articleSearch && canCreate ? <button className="news-inline-link" type="button" onClick={() => document.querySelector('.news-basic-card')?.scrollIntoView({ behavior: 'smooth' })}>Tạo bài viết mới ở phần phía trên</button> : null}>{articleSearch ? 'Hãy thử từ khóa khác.' : 'Danh sách sẽ xuất hiện sau khi có bài viết được lưu.'}</EmptyState>}
       {!articleSearchLoading && articles.length > 0 && <div className="news-article-list">{articles.map((item) => <button className={`news-article-list-row${item.id === selectedArticleId ? ' selected' : ''}`} type="button" key={item.id} onClick={() => selectArticle(item.id)}><span><strong>{articleLabel(item)}</strong><small>{articleMeta(item)}</small></span><span>Chỉnh sửa →</span></button>)}</div>}
       {!editingLoading && selectedArticleId && editingArticle.articleId && <div ref={editorRef} id="news-article-editor" className="news-article-edit-panel" tabIndex="-1">
-        <div className="news-edit-panel-heading"><div><strong>Đang chỉnh sửa: {editingArticle.title || 'Bài viết'}</strong><p>Cập nhật nội dung bài viết đã tồn tại.</p></div><span className={`news-status-badge ${editingArticle.status}`}>{editingArticle.status === 'published' ? 'Đã xuất bản' : 'Nháp — chưa hiển thị công khai'}</span></div>
+        <div className="news-edit-panel-heading"><div><strong>Đang chỉnh sửa: {editingArticle.title || 'Bài viết'}</strong><p>{editingArticle.status === 'archived' ? 'Bài viết đang được lưu trữ và không còn hiển thị công khai.' : 'Cập nhật nội dung bài viết đã tồn tại.'}</p></div><span className={`news-status-badge ${editingArticle.status}`}>{statusLabel(editingArticle.status)}</span></div>
         <div className="news-form-grid">
-          <Field label="Tiêu đề bài viết *"><input value={editingArticle.title} onChange={(event) => updateEditingTitle(event.target.value)} disabled={!canUpdate} /></Field>
-          <div><GeneratedSlug value={editingArticle.slug} customized={editingSlugEdited} onCustomize={() => canUpdate && setShowEditingSlugEditor(true)} />{showEditingSlugEditor && <Field label="Đường dẫn tùy chỉnh"><input value={editingArticle.slug} onChange={(event) => updateEditingSlug(event.target.value)} disabled={!canUpdate} /></Field>}</div>
-          <SearchableSelect label="Chuyên mục (tùy chọn)" value={editingArticle.categoryId} options={categories} onChange={(value) => setEditingArticle({ ...editingArticle, categoryId: value })} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục." loading={selectorLoading} disabled={!canUpdate} />
-          <Field label="Mô tả ngắn (tùy chọn)"><textarea rows="3" value={editingArticle.excerpt} onChange={(event) => setEditingArticle({ ...editingArticle, excerpt: event.target.value })} disabled={!canUpdate} /></Field>
-          <ContentEditor value={editingArticle.content} onChange={(content) => setEditingArticle({ ...editingArticle, content })} disabled={!canUpdate} />
+          <Field label="Tiêu đề bài viết *"><input value={editingArticle.title} onChange={(event) => updateEditingTitle(event.target.value)} disabled={!canUpdate || editingArticle.status === 'archived'} /></Field>
+          <div><GeneratedSlug value={editingArticle.slug} customized={editingSlugEdited} onCustomize={() => canUpdate && editingArticle.status !== 'archived' && setShowEditingSlugEditor(true)} />{showEditingSlugEditor && <Field label="Đường dẫn tùy chỉnh"><input value={editingArticle.slug} onChange={(event) => updateEditingSlug(event.target.value)} disabled={!canUpdate || editingArticle.status === 'archived'} /></Field>}</div>
+          <SearchableSelect label="Chuyên mục (tùy chọn)" value={editingArticle.categoryId} options={categories} onChange={(value) => setEditingArticle({ ...editingArticle, categoryId: value })} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục." loading={selectorLoading} disabled={!canUpdate || editingArticle.status === 'archived'} />
+          <Field label="Mô tả ngắn (tùy chọn)"><textarea rows="3" value={editingArticle.excerpt} onChange={(event) => setEditingArticle({ ...editingArticle, excerpt: event.target.value })} disabled={!canUpdate || editingArticle.status === 'archived'} /></Field>
+          <ContentEditor value={editingArticle.content} onChange={(content) => setEditingArticle({ ...editingArticle, content })} disabled={!canUpdate || editingArticle.status === 'archived'} />
         </div>
-        <div className="news-workflow-actions">{canUpdate && <button className="admin-primary-button" type="button" disabled={busy} onClick={saveEditing}>Lưu thay đổi</button>}{canPublish && editingArticle.status !== 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={publishEditing}>Đăng bài</button>}{canPublish && editingArticle.status === 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={unpublishEditing}>Gỡ xuất bản</button>}<button className="admin-secondary-button" type="button" disabled={busy} onClick={() => selectArticle('')}>Hủy</button></div>
+        <div className="news-workflow-actions">{canUpdate && editingArticle.status !== 'archived' && <button className="admin-primary-button" type="button" disabled={busy} onClick={saveEditing}>Lưu thay đổi</button>}{canPublish && editingArticle.status !== 'published' && editingArticle.status !== 'archived' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={publishEditing}>Đăng bài</button>}{canPublish && editingArticle.status === 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={unpublishEditing}>Gỡ xuất bản</button>}{canDelete && editingArticle.status !== 'archived' && <button className="admin-danger-button" type="button" disabled={busy} onClick={() => setArchiveConfirmation({ articleId: editingArticle.articleId, title: editingArticle.title, status: editingArticle.status })}>Đưa vào lưu trữ</button>}<button className="admin-secondary-button" type="button" disabled={busy} onClick={() => selectArticle('')}>Hủy</button></div>
       </div>}
     </section>}
 
@@ -469,6 +484,7 @@ export default function NewsManagementPage() {
     </section>}
 
     {previewArticle && <div className="news-preview-backdrop" role="presentation" onClick={() => setPreviewArticle(null)}><article className="news-preview-panel" role="dialog" aria-modal="true" aria-labelledby="news-preview-title" onClick={(event) => event.stopPropagation()}><div className="news-preview-header"><span className="news-status-badge draft">Bản xem trước</span><button className="close-button" type="button" onClick={() => setPreviewArticle(null)} aria-label="Đóng xem trước">×</button></div><p className="eyebrow">{policyLabel(makePolicy(previewArticle.mode, previewArticle.minVipLevel))}</p><h3 id="news-preview-title">{previewArticle.title || 'Chưa có tiêu đề'}</h3>{previewArticle.excerpt && <p className="news-article-excerpt">{previewArticle.excerpt}</p>}<div className="news-preview-content">{previewArticle.content || 'Chưa có nội dung.'}</div></article></div>}
+    {archiveConfirmation && <div className="news-confirm-backdrop" role="presentation" onClick={() => !busy && setArchiveConfirmation(null)}><div className="news-confirm-panel" role="dialog" aria-modal="true" aria-labelledby="news-archive-title" onClick={(event) => event.stopPropagation()}><p className="eyebrow">LƯU TRỮ BÀI VIẾT</p><h3 id="news-archive-title">Đưa bài viết vào lưu trữ?</h3><p><strong>{archiveConfirmation.title || 'Bài viết không có tiêu đề'}</strong></p><p>Trạng thái hiện tại: {statusLabel(archiveConfirmation.status)}.</p><p className="news-confirm-warning">Bài viết sẽ không còn xuất hiện với người đọc công khai. Dữ liệu và ACL được giữ lại để bảo toàn lịch sử. Thao tác này hiện chưa có chức năng khôi phục trên giao diện.</p><div className="news-action-row"><button className="admin-secondary-button" type="button" disabled={busy} onClick={() => setArchiveConfirmation(null)}>Hủy</button><button className="admin-danger-button" type="button" disabled={busy} onClick={confirmArchive}>{busy ? 'Đang lưu trữ...' : 'Xác nhận lưu trữ'}</button></div></div></div>}
   </section>
 }
 

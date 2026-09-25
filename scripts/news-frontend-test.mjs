@@ -9,6 +9,7 @@ const management = fs.readFileSync('src/pages/NewsManagementPage.jsx', 'utf8')
 for (const functionName of [
   'listNews', 'getNewsArticle', 'createNewsArticle', 'updateNewsArticle',
   'publishNewsArticle', 'unpublishNewsArticle', 'setNewsAccessPolicy',
+  'archiveNewsArticle',
   'createNewsCategory', 'updateNewsCategory', 'deleteNewsCategory',
   'setNewsAclEntry', 'removeNewsAclEntry', 'listNewsManagement',
   'getNewsManagementArticle', 'listNewsCategories', 'listNewsUsers', 'listNewsGroups',
@@ -35,6 +36,9 @@ assert.match(management, /editingLoading/)
 assert.match(management, /editingError/)
 assert.match(management, /friendlyArticleLoadError/)
 assert.doesNotMatch(service, /deleteNewsArticle/)
+assert.match(management, /archiveNewsArticle/)
+assert.match(management, /archiveConfirmation/)
+assert.match(management, /Đưa vào lưu trữ/)
 assert.doesNotMatch(management, /Firebase Storage|thumbnailUrl|<input[^>]*ảnh/i)
 assert.match(management, /listNewsManagement\(\{ query: articleSearch\.trim\(\), limit: 20 \}\)/)
 assert.match(management, /setTimeout\(async \(\) =>/)
