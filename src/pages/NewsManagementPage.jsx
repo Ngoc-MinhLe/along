@@ -203,6 +203,11 @@ export default function NewsManagementPage() {
     return 'Không thể thực hiện thao tác. Vui lòng thử lại.'
   }
 
+  function friendlyArticleLoadError(actionError) {
+    if (actionError?.code === 'permission-denied') return 'Bạn không có quyền chỉnh sửa bài viết này.'
+    return 'Không thể tải bài viết để chỉnh sửa.'
+  }
+
   function updateDraftTitle(title) {
     setDraftArticle((current) => ({ ...current, title, slug: draftSlugEdited ? current.slug : makeSlug(title) }))
   }
@@ -292,8 +297,17 @@ export default function NewsManagementPage() {
     try {
       const result = await getNewsManagementArticle(articleId)
       if (requestId !== editorRequestRef.current) return
-      const selected = result.article
-      const nextArticle = { ...emptyArticle, ...selected, categoryId: selected.categoryId || '', mode: selected.accessPolicy?.mode || 'PUBLIC', minVipLevel: selected.accessPolicy?.minVipLevel || 1 }
+      const selected = result?.article
+      if (!selected || typeof selected !== 'object') throw new Error('The News article payload is missing.')
+      const nextArticle = {
+        ...emptyArticle,
+        ...selected,
+        articleId: selected.articleId || selected.id || articleId,
+        categoryId: selected.categoryId || '',
+        mode: selected.accessPolicy?.mode || 'PUBLIC',
+        minVipLevel: selected.accessPolicy?.minVipLevel || 1,
+      }
+      if (!nextArticle.articleId) throw new Error('The News article identifier is missing.')
       setEditingArticle(nextArticle)
       setEditingSlugEdited(Boolean(selected.slug && selected.slug !== makeSlug(selected.title)))
       setShowEditingSlugEditor(false)
@@ -303,7 +317,7 @@ export default function NewsManagementPage() {
         setAccessVipLevel(selected.accessPolicy.minVipLevel || 1)
       }
     } catch (loadError) {
-      if (requestId === editorRequestRef.current) setEditingError(friendlyNewsError(loadError))
+      if (requestId === editorRequestRef.current) setEditingError(friendlyArticleLoadError(loadError))
     } finally {
       if (requestId === editorRequestRef.current) setEditingLoading(false)
     }
