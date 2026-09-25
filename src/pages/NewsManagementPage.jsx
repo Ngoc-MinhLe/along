@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePermissions } from '../auth/PermissionContext'
 import { PERMISSIONS } from '../services/rbac/permissions'
 import SearchableSelect from '../components/SearchableSelect'
@@ -105,6 +105,8 @@ export default function NewsManagementPage() {
   const [editingArticle, setEditingArticle] = useState(emptyArticle)
   const [editingSlugEdited, setEditingSlugEdited] = useState(false)
   const [showEditingSlugEditor, setShowEditingSlugEditor] = useState(false)
+  const [editingLoading, setEditingLoading] = useState(false)
+  const [editingError, setEditingError] = useState('')
   const [selectedArticleId, setSelectedArticleId] = useState('')
   const [previewArticle, setPreviewArticle] = useState(null)
   const [category, setCategory] = useState(emptyCategory)
@@ -127,6 +129,8 @@ export default function NewsManagementPage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [selectorRefreshKey, setSelectorRefreshKey] = useState(0)
+  const editorRef = useRef(null)
+  const editorRequestRef = useRef(0)
 
   const canReadManagementResources = canCreate || canUpdate || canDelete || canPublish
   const aclResourceOptions = useMemo(() => acl.scope === 'ARTICLE' ? articles : categories, [acl.scope, articles, categories])
@@ -177,6 +181,12 @@ export default function NewsManagementPage() {
     }, articleSearch.trim() ? 350 : 0)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [articleSearch, canUpdate, canPublish, selectorRefreshKey])
+
+  useEffect(() => {
+    if (!selectedArticleId || !editingArticle.articleId || editingLoading || !editorRef.current) return
+    editorRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    editorRef.current.focus({ preventScroll: true })
+  }, [selectedArticleId, editingArticle.articleId, editingLoading])
 
   async function runAction(action, successMessage) {
     setBusy(true); setMessage(''); setError('')
@@ -266,15 +276,22 @@ export default function NewsManagementPage() {
   }
 
   async function selectArticle(articleId) {
+    const requestId = editorRequestRef.current + 1
+    editorRequestRef.current = requestId
     setSelectedArticleId(articleId)
+    setEditingError('')
     if (!articleId) {
+      setEditingLoading(false)
       setEditingArticle(emptyArticle)
       setEditingSlugEdited(false)
       setShowEditingSlugEditor(false)
       return
     }
+    setEditingLoading(true)
+    setEditingArticle(emptyArticle)
     try {
       const result = await getNewsManagementArticle(articleId)
+      if (requestId !== editorRequestRef.current) return
       const selected = result.article
       const nextArticle = { ...emptyArticle, ...selected, categoryId: selected.categoryId || '', mode: selected.accessPolicy?.mode || 'PUBLIC', minVipLevel: selected.accessPolicy?.minVipLevel || 1 }
       setEditingArticle(nextArticle)
@@ -285,9 +302,10 @@ export default function NewsManagementPage() {
         setAccessMode(selected.accessPolicy.mode)
         setAccessVipLevel(selected.accessPolicy.minVipLevel || 1)
       }
-      window.requestAnimationFrame(() => document.getElementById('news-article-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
     } catch (loadError) {
-      setError(friendlyNewsError(loadError))
+      if (requestId === editorRequestRef.current) setEditingError(friendlyNewsError(loadError))
+    } finally {
+      if (requestId === editorRequestRef.current) setEditingLoading(false)
     }
   }
 
@@ -390,10 +408,12 @@ export default function NewsManagementPage() {
       </div>
       <p className="news-search-limit-note">Kết quả được tải giới hạn theo từng lần tìm, không tải toàn bộ bộ sưu tập bài viết về trình duyệt. Lọc trạng thái/chuyên mục và phân trang cần backend bổ sung contract.</p>
       {articleSearchError && <p className="admin-error" role="alert">Không thể tìm bài viết. Vui lòng thử lại: {articleSearchError}</p>}
+      {editingLoading && <p className="inline-status" role="status">Đang tải bài viết để mở trình chỉnh sửa...</p>}
+      {editingError && <p className="admin-error" role="alert">Không thể mở bài viết: {editingError}</p>}
       {!articleSearchLoading && !articleSearchError && !articles.length && <EmptyState title={articleSearch ? 'Không tìm thấy bài viết phù hợp.' : 'Chưa có bài viết nào.'} action={!articleSearch && canCreate ? <button className="news-inline-link" type="button" onClick={() => document.querySelector('.news-basic-card')?.scrollIntoView({ behavior: 'smooth' })}>Tạo bài viết mới ở phần phía trên</button> : null}>{articleSearch ? 'Hãy thử từ khóa khác.' : 'Danh sách sẽ xuất hiện sau khi có bài viết được lưu.'}</EmptyState>}
       {!articleSearchLoading && articles.length > 0 && <div className="news-article-list">{articles.map((item) => <button className={`news-article-list-row${item.id === selectedArticleId ? ' selected' : ''}`} type="button" key={item.id} onClick={() => selectArticle(item.id)}><span><strong>{articleLabel(item)}</strong><small>{articleMeta(item)}</small></span><span>Chỉnh sửa →</span></button>)}</div>}
-      {selectedArticleId && editingArticle.articleId && <div className="news-article-edit-panel">
-        <div id="news-article-editor" className="news-edit-panel-heading"><div><strong>Đang chỉnh sửa: {editingArticle.title || 'Bài viết'}</strong><p>Cập nhật nội dung bài viết đã tồn tại.</p></div><span className={`news-status-badge ${editingArticle.status}`}>{editingArticle.status === 'published' ? 'Đã xuất bản' : 'Nháp — chưa hiển thị công khai'}</span></div>
+      {!editingLoading && selectedArticleId && editingArticle.articleId && <div ref={editorRef} id="news-article-editor" className="news-article-edit-panel" tabIndex="-1">
+        <div className="news-edit-panel-heading"><div><strong>Đang chỉnh sửa: {editingArticle.title || 'Bài viết'}</strong><p>Cập nhật nội dung bài viết đã tồn tại.</p></div><span className={`news-status-badge ${editingArticle.status}`}>{editingArticle.status === 'published' ? 'Đã xuất bản' : 'Nháp — chưa hiển thị công khai'}</span></div>
         <div className="news-form-grid">
           <Field label="Tiêu đề bài viết *"><input value={editingArticle.title} onChange={(event) => updateEditingTitle(event.target.value)} disabled={!canUpdate} /></Field>
           <div><GeneratedSlug value={editingArticle.slug} customized={editingSlugEdited} onCustomize={() => canUpdate && setShowEditingSlugEditor(true)} />{showEditingSlugEditor && <Field label="Đường dẫn tùy chỉnh"><input value={editingArticle.slug} onChange={(event) => updateEditingSlug(event.target.value)} disabled={!canUpdate} /></Field>}</div>
