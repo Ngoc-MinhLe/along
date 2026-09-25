@@ -13,6 +13,7 @@ export default function SearchableSelect({
   getMeta,
   placeholder = 'Tìm và chọn…',
   emptyMessage = 'Không tìm thấy lựa chọn phù hợp.',
+  noDataMessage = 'Chưa có dữ liệu.',
   disabled = false,
   loading = false,
   allowClear = true,
@@ -48,7 +49,7 @@ export default function SearchableSelect({
         {getLabel(option)}{getMeta?.(option) ? ` · ${getMeta(option)}` : ''}
       </option>)}
     </select>
-    {!loading && !filtered.length && <small className="resource-selector-empty">{emptyMessage}</small>}
+    {!loading && !filtered.length && <small className="resource-selector-empty">{query.trim() ? emptyMessage : noDataMessage}</small>}
     {selected && <div className="resource-selector-preview">
       <strong>{getLabel(selected)}</strong>
       {getMeta?.(selected) && <small>{getMeta(selected)}</small>}
