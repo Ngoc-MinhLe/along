@@ -65,6 +65,22 @@ function EmptyState({ icon = 'ⓘ', title, children, action }) {
   </div>
 }
 
+function GeneratedSlug({ value, onCustomize, customized = false, source = 'tiêu đề bài viết' }) {
+  return <div className="news-generated-field">
+    <span className="news-generated-label">Đường dẫn trang</span>
+    <code>{value || 'Sẽ tự động tạo sau khi nhập tiêu đề'}</code>
+    <small>Tự động tạo từ {source}.</small>
+    <button className="news-inline-link" type="button" onClick={onCustomize}>{customized ? 'Chỉnh sửa đường dẫn' : 'Tùy chỉnh đường dẫn'}</button>
+  </div>
+}
+
+function AdvancedDisclosure({ title, description, children }) {
+  return <details className="news-optional-details">
+    <summary><span>{title}</span><small>{description}</small></summary>
+    <div className="news-optional-content">{children}</div>
+  </details>
+}
+
 function ActionResult({ message, error }) {
   return <>{message && <p className="admin-success" role="status">{message}</p>}{error && <p className="admin-error" role="alert">{error}</p>}</>
 }
@@ -76,8 +92,11 @@ export default function NewsManagementPage() {
   const canDelete = hasPermission(PERMISSIONS.NEWS_DELETE)
   const canPublish = hasPermission(PERMISSIONS.NEWS_PUBLISH)
   const [article, setArticle] = useState(emptyArticle)
+  const [articleSlugEdited, setArticleSlugEdited] = useState(false)
+  const [showArticleSlugEditor, setShowArticleSlugEditor] = useState(false)
   const [category, setCategory] = useState(emptyCategory)
   const [categorySlugEdited, setCategorySlugEdited] = useState(false)
+  const [showCategorySlugEditor, setShowCategorySlugEditor] = useState(false)
   const [acl, setAcl] = useState(emptyAcl)
   const [lifecycleId, setLifecycleId] = useState('')
   const [accessId, setAccessId] = useState('')
@@ -139,6 +158,15 @@ export default function NewsManagementPage() {
     setCategorySlugEdited(true)
   }
 
+  function updateArticleTitle(title) {
+    setArticle((current) => ({ ...current, title, slug: articleSlugEdited ? current.slug : makeSlug(title) }))
+  }
+
+  function updateArticleSlug(slug) {
+    setArticle((current) => ({ ...current, slug }))
+    setArticleSlugEdited(true)
+  }
+
   async function createCategory() {
     const slug = categorySlugEdited ? category.slug.trim() : makeSlug(category.name)
     if (!slug) {
@@ -150,6 +178,7 @@ export default function NewsManagementPage() {
       await createNewsCategory({ ...category, slug, defaultAccessPolicy: categoryPolicy() })
       setCategory(emptyCategory)
       setCategorySlugEdited(false)
+      setShowCategorySlugEditor(false)
       setSelectorRefreshKey((value) => value + 1)
     }, 'Đã tạo chuyên mục và cập nhật danh sách.')
   }
@@ -166,7 +195,11 @@ export default function NewsManagementPage() {
 
   async function selectArticle(articleId, target = 'edit') {
     if (!articleId) {
-      if (target === 'edit') setArticle(emptyArticle)
+      if (target === 'edit') {
+        setArticle(emptyArticle)
+        setArticleSlugEdited(false)
+        setShowArticleSlugEditor(false)
+      }
       if (target === 'lifecycle') setLifecycleId('')
       if (target === 'access') setAccessId('')
       if (target === 'acl') setAcl((current) => ({ ...current, resourceId: '' }))
@@ -187,6 +220,8 @@ export default function NewsManagementPage() {
         const result = await getNewsManagementArticle(articleId)
         const selected = result.article
         setArticle({ ...emptyArticle, ...selected, categoryId: selected.categoryId || '', mode: selected.accessPolicy?.mode || 'PUBLIC', minVipLevel: selected.accessPolicy?.minVipLevel || 1 })
+        setArticleSlugEdited(Boolean(selected.slug && selected.slug !== makeSlug(selected.title)))
+        setShowArticleSlugEditor(false)
       } catch (loadError) { setSelectorError(loadError.message) }
     }
   }
@@ -223,11 +258,11 @@ export default function NewsManagementPage() {
       <SectionHeader icon="1" title="Tạo bài viết mới" subtitle="Bài viết sẽ được lưu ở trạng thái Nháp và chưa hiển thị công khai." />
       <div className="news-draft-notice"><strong>ⓘ Bài viết mới được tạo ở trạng thái Nháp.</strong><span>Bạn có thể chỉnh sửa trước khi xuất bản.</span></div>
       <div className="news-form-grid">
-        <Field label="Tiêu đề bài viết" help="Nhập tiêu đề chính của bài viết."><input value={article.title} onChange={(event) => setArticle({ ...article, title: event.target.value })} /></Field>
-        <Field label="Đường dẫn (Slug) – tùy chọn" help="Ví dụ: thong-bao-tuyen-sinh-2027. Nếu để trống, hệ thống có thể tự tạo."><input value={article.slug} onChange={(event) => setArticle({ ...article, slug: event.target.value })} /></Field>
-        <div className="news-category-picker"><SearchableSelect label="Chuyên mục" value={article.categoryId} options={categories} onChange={(value) => setArticle({ ...article, categoryId: value })} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục." loading={selectorLoading} />{!selectorLoading && !categories.length && <button className="news-inline-link" type="button" onClick={scrollToCategoryManagement}>+ Tạo chuyên mục</button>}</div>
-        <AccessFields value={article} onChange={setArticle} />
-        <Field label="Mô tả ngắn" help="Nhập phần tóm tắt ngắn giúp người đọc hiểu bài viết nói về điều gì."><textarea rows="2" value={article.excerpt} onChange={(event) => setArticle({ ...article, excerpt: event.target.value })} /></Field>
+        <Field label="Tiêu đề bài viết" help="Nhập tiêu đề chính của bài viết."><input value={article.title} onChange={(event) => updateArticleTitle(event.target.value)} /></Field>
+        <div><GeneratedSlug value={article.slug} customized={articleSlugEdited} onCustomize={() => setShowArticleSlugEditor(true)} />{showArticleSlugEditor && <Field label="Đường dẫn tùy chỉnh"><input value={article.slug} onChange={(event) => updateArticleSlug(event.target.value)} /></Field>}</div>
+        <div className="news-category-picker"><SearchableSelect label="Chuyên mục (tùy chọn)" value={article.categoryId} options={categories} onChange={(value) => setArticle({ ...article, categoryId: value })} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục." loading={selectorLoading} />{!selectorLoading && !categories.length && <button className="news-inline-link" type="button" onClick={scrollToCategoryManagement}>+ Tạo chuyên mục</button>}</div>
+        <AdvancedDisclosure title="Tùy chọn nâng cao: Chính sách truy cập" description="Mặc định: Công khai."><p className="news-help">Mặc định: bài viết được phép truy cập công khai.</p><AccessFields value={article} onChange={setArticle} /></AdvancedDisclosure>
+        <Field label="Mô tả ngắn (tùy chọn)" help="Nhập phần tóm tắt ngắn nếu muốn người đọc hiểu nhanh bài viết nói về điều gì."><textarea rows="2" value={article.excerpt} onChange={(event) => setArticle({ ...article, excerpt: event.target.value })} /></Field>
         <Field label="Nội dung bài viết" help="Nhập nội dung đầy đủ của bài viết."><textarea rows="8" value={article.content} onChange={(event) => setArticle({ ...article, content: event.target.value })} /></Field>
       </div>
       <button className="admin-primary-button" type="button" disabled={busy} onClick={() => runAction(() => createNewsArticle(articlePayload()), 'Đã tạo bài viết nháp.')}>Tạo bài viết</button>
@@ -237,8 +272,8 @@ export default function NewsManagementPage() {
       <SectionHeader icon="2" title="Chỉnh sửa bài viết" subtitle="Chọn bài viết từ danh sách để xem và chỉnh sửa nội dung." />
       <div className="news-form-grid">
         <SearchableSelect label="Bài viết" value={article.articleId} options={articles} onChange={(value) => selectArticle(value, 'edit')} getLabel={articleLabel} getMeta={articleMeta} placeholder="Tìm bài viết theo tiêu đề..." noDataMessage="Chưa có bài viết nào. Hãy tạo bài viết mới ở phần phía trên." loading={selectorLoading} />
-        <Field label="Tiêu đề bài viết"><input value={article.title} onChange={(event) => setArticle({ ...article, title: event.target.value })} /></Field>
-        <Field label="Đường dẫn (Slug)"><input value={article.slug} onChange={(event) => setArticle({ ...article, slug: event.target.value })} /></Field>
+        <Field label="Tiêu đề bài viết"><input value={article.title} onChange={(event) => updateArticleTitle(event.target.value)} /></Field>
+        <div><GeneratedSlug value={article.slug} customized={articleSlugEdited} onCustomize={() => setShowArticleSlugEditor(true)} />{showArticleSlugEditor && <Field label="Đường dẫn tùy chỉnh"><input value={article.slug} onChange={(event) => updateArticleSlug(event.target.value)} /></Field>}</div>
         <SearchableSelect label="Chuyên mục" value={article.categoryId} options={categories} onChange={(value) => setArticle({ ...article, categoryId: value })} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục." loading={selectorLoading} />
         <Field label="Mô tả ngắn"><textarea rows="2" value={article.excerpt} onChange={(event) => setArticle({ ...article, excerpt: event.target.value })} /></Field>
         <Field label="Nội dung bài viết"><textarea rows="6" value={article.content} onChange={(event) => setArticle({ ...article, content: event.target.value })} /></Field>
@@ -247,11 +282,13 @@ export default function NewsManagementPage() {
       <button className="admin-primary-button" type="button" disabled={busy || !article.articleId} onClick={() => runAction(() => updateNewsArticle(articlePayload()), 'Đã cập nhật bài viết.')}>Lưu cập nhật</button>
     </section>}
 
-    {canUpdate && <section className="news-management-card news-advanced-card">
-      <SectionHeader icon="3" title="Chính sách truy cập" subtitle="Thiết lập mức độ truy cập cho một bài viết cụ thể." tone="advanced" />
-      <p className="news-help">Sử dụng chức năng này khi muốn thay đổi mức độ truy cập của một bài viết. <HelpHint text="Chính sách truy cập quyết định nhóm người có thể xem bài viết." /></p>
-      <div className="news-inline-form"><SearchableSelect label="Bài viết" value={accessId} options={articles} onChange={(value) => selectArticle(value, 'access')} getLabel={articleLabel} getMeta={articleMeta} placeholder="Tìm bài viết..." noDataMessage="Chưa có bài viết để thiết lập chính sách." loading={selectorLoading} /><AccessSelector mode={accessMode} minVipLevel={accessVipLevel} onModeChange={setAccessMode} onVipChange={setAccessVipLevel} /><button className="admin-primary-button" type="button" disabled={busy || !accessId} onClick={() => runAction(() => setNewsAccessPolicy(accessId, makePolicy(accessMode, accessVipLevel)), 'Đã cập nhật chính sách truy cập.')}>Lưu chính sách</button></div>
-    </section>}
+    {canUpdate && <details className="news-management-card news-advanced-card news-advanced-disclosure">
+      <summary><SectionHeader icon="3" title="Chính sách truy cập" subtitle="Tùy chọn nâng cao — thiết lập mức độ truy cập cho một bài viết cụ thể." tone="advanced" /><span className="news-disclosure-action">Mở phần nâng cao</span></summary>
+      <div className="news-disclosure-body">
+        <p className="news-help">Sử dụng chức năng này khi muốn thay đổi mức độ truy cập của một bài viết. <HelpHint text="Chính sách truy cập quyết định nhóm người có thể xem bài viết." /></p>
+        <div className="news-inline-form"><SearchableSelect label="Bài viết" value={accessId} options={articles} onChange={(value) => selectArticle(value, 'access')} getLabel={articleLabel} getMeta={articleMeta} placeholder="Tìm bài viết..." noDataMessage="Chưa có bài viết để thiết lập chính sách." loading={selectorLoading} /><AccessSelector mode={accessMode} minVipLevel={accessVipLevel} onModeChange={setAccessMode} onVipChange={setAccessVipLevel} /><button className="admin-primary-button" type="button" disabled={busy || !accessId} onClick={() => runAction(() => setNewsAccessPolicy(accessId, makePolicy(accessMode, accessVipLevel)), 'Đã cập nhật chính sách truy cập.')}>Lưu chính sách</button></div>
+      </div>
+    </details>}
 
     {canPublish && <section className="news-management-card news-basic-card">
       <SectionHeader icon="4" title="Xuất bản / Gỡ xuất bản" subtitle="Sau khi hoàn thiện nội dung, bạn có thể xuất bản bài viết để người đọc truy cập." />
@@ -259,26 +296,28 @@ export default function NewsManagementPage() {
       <div className="news-inline-form"><SearchableSelect label="Bài viết" value={lifecycleId} options={articles} onChange={(value) => selectArticle(value, 'lifecycle')} getLabel={articleLabel} getMeta={articleMeta} placeholder="Tìm bài viết..." noDataMessage="Chưa có bài viết để xuất bản." loading={selectorLoading} /><button className="admin-primary-button" type="button" disabled={busy || !lifecycleId} onClick={() => runAction(() => publishNewsArticle(lifecycleId), 'Đã xuất bản bài viết.')}>Xuất bản</button><button className="admin-secondary-button" type="button" disabled={busy || !lifecycleId} onClick={() => runAction(() => unpublishNewsArticle(lifecycleId), 'Đã chuyển bài viết về Nháp.')}>Gỡ xuất bản</button></div>
     </section>}
 
-    {canUpdate && <section className="news-management-card news-advanced-card">
-      <SectionHeader icon="+" title="Phân quyền đặc biệt (ACL)" subtitle="Cấp hoặc thu hồi quyền truy cập đặc biệt cho một người dùng hoặc nhóm đối với tài nguyên cụ thể." tone="advanced" />
-      <p className="news-help news-warning-help">Đây là chức năng nâng cao. Với bài viết thông thường, bạn không cần thiết lập ACL.</p>
-      <div className="news-form-grid">
-        <Field label="Phạm vi" help="Chọn bài viết hoặc chuyên mục mà ACL áp dụng."><select value={acl.scope} onChange={(event) => setAcl({ ...acl, scope: event.target.value, resourceId: '' })}><option value="ARTICLE">Bài viết</option><option value="CATEGORY">Chuyên mục</option></select></Field>
-        <SearchableSelect label={acl.scope === 'ARTICLE' ? 'Bài viết' : 'Chuyên mục'} value={acl.resourceId} options={aclResourceOptions} onChange={(value) => setAcl({ ...acl, resourceId: value })} getLabel={(item) => item.title || item.name || item.id} getMeta={(item) => item.title ? articleMeta(item) : statusLabel(item.status)} placeholder="Tìm tài nguyên..." noDataMessage={acl.scope === 'ARTICLE' ? 'Chưa có bài viết.' : 'Chưa có chuyên mục.'} loading={selectorLoading} />
-        <Field label="Loại đối tượng" help="Đối tượng nhận quyền truy cập đặc biệt."><select value={acl.principalType} onChange={(event) => setAcl({ ...acl, principalType: event.target.value, principalId: '' })}><option value="USER">Người dùng</option><option value="GROUP">Nhóm</option></select></Field>
-        <SearchableSelect label={acl.principalType === 'USER' ? 'Người dùng' : 'Nhóm'} value={acl.principalId} options={principalOptions} onChange={(value) => setAcl({ ...acl, principalId: value })} getLabel={(item) => item.displayName || item.name || item.id} getMeta={(item) => item.email || statusLabel(item.status)} placeholder="Tìm người dùng hoặc nhóm..." emptyMessage={acl.principalType === 'USER' ? 'Không tìm thấy người dùng phù hợp.' : 'Không tìm thấy nhóm phù hợp.'} noDataMessage={acl.principalType === 'USER' ? 'Chưa có người dùng active.' : 'Chưa có nhóm active.'} loading={selectorLoading} />
+    {canUpdate && <details className="news-management-card news-advanced-card news-advanced-disclosure">
+      <summary><SectionHeader icon="+" title="Phân quyền đặc biệt (ACL)" subtitle="Chức năng nâng cao — chỉ dùng khi cần giới hạn quyền truy cập riêng cho người dùng hoặc nhóm." tone="advanced" /><span className="news-disclosure-action">Mở phần nâng cao</span></summary>
+      <div className="news-disclosure-body">
+        <p className="news-help news-warning-help">Với bài viết thông thường, bạn không cần thiết lập ACL.</p>
+        <div className="news-form-grid">
+          <Field label="Phạm vi" help="Chọn bài viết hoặc chuyên mục mà ACL áp dụng."><select value={acl.scope} onChange={(event) => setAcl({ ...acl, scope: event.target.value, resourceId: '' })}><option value="ARTICLE">Bài viết</option><option value="CATEGORY">Chuyên mục</option></select></Field>
+          <SearchableSelect label={acl.scope === 'ARTICLE' ? 'Bài viết' : 'Chuyên mục'} value={acl.resourceId} options={aclResourceOptions} onChange={(value) => setAcl({ ...acl, resourceId: value })} getLabel={(item) => item.title || item.name || item.id} getMeta={(item) => item.title ? articleMeta(item) : statusLabel(item.status)} placeholder="Tìm tài nguyên..." noDataMessage={acl.scope === 'ARTICLE' ? 'Chưa có bài viết.' : 'Chưa có chuyên mục.'} loading={selectorLoading} />
+          <Field label="Loại đối tượng" help="Đối tượng nhận quyền truy cập đặc biệt."><select value={acl.principalType} onChange={(event) => setAcl({ ...acl, principalType: event.target.value, principalId: '' })}><option value="USER">Người dùng</option><option value="GROUP">Nhóm</option></select></Field>
+          <SearchableSelect label={acl.principalType === 'USER' ? 'Người dùng' : 'Nhóm'} value={acl.principalId} options={principalOptions} onChange={(value) => setAcl({ ...acl, principalId: value })} getLabel={(item) => item.displayName || item.name || item.id} getMeta={(item) => item.email || statusLabel(item.status)} placeholder="Tìm người dùng hoặc nhóm..." emptyMessage={acl.principalType === 'USER' ? 'Không tìm thấy người dùng phù hợp.' : 'Không tìm thấy nhóm phù hợp.'} noDataMessage={acl.principalType === 'USER' ? 'Chưa có người dùng active.' : 'Chưa có nhóm active.'} loading={selectorLoading} />
+        </div>
+        <div className="news-action-row"><button className="admin-primary-button" type="button" disabled={busy || !acl.resourceId || !acl.principalId} onClick={() => runAction(() => setNewsAclEntry(acl), 'Đã thêm phân quyền đặc biệt.')}>Thêm ACL</button><button className="admin-secondary-button" type="button" disabled={busy || !acl.resourceId || !acl.principalId} onClick={() => runAction(() => removeNewsAclEntry(acl), 'Đã xóa phân quyền đặc biệt.')}>Thu hồi ACL</button></div>
       </div>
-      <div className="news-action-row"><button className="admin-primary-button" type="button" disabled={busy || !acl.resourceId || !acl.principalId} onClick={() => runAction(() => setNewsAclEntry(acl), 'Đã thêm phân quyền đặc biệt.')}>Thêm ACL</button><button className="admin-secondary-button" type="button" disabled={busy || !acl.resourceId || !acl.principalId} onClick={() => runAction(() => removeNewsAclEntry(acl), 'Đã xóa phân quyền đặc biệt.')}>Thu hồi ACL</button></div>
-    </section>}
+    </details>}
 
     {(canCreate || canUpdate || canDelete) && <section id="news-category-management" className="news-management-card news-advanced-card">
       <SectionHeader icon="▣" title="Quản lý chuyên mục" subtitle="Chuyên mục giúp phân loại các bài viết theo chủ đề." tone="advanced" />
       <div className="news-form-grid">
-        <SearchableSelect label="Chuyên mục cần sửa/xóa" value={category.categoryId} options={categories} onChange={(value) => { const selected = categories.find((item) => item.id === value); setCategory({ ...category, categoryId: value, name: selected?.name || '', slug: selected?.slug || '', description: selected?.description || '', status: selected?.status || 'active' }); setCategorySlugEdited(false) }} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục. Hãy tạo chuyên mục đầu tiên." loading={selectorLoading} />
+        <SearchableSelect label="Chuyên mục cần sửa/xóa" value={category.categoryId} options={categories} onChange={(value) => { const selected = categories.find((item) => item.id === value); setCategory({ ...category, categoryId: value, name: selected?.name || '', slug: selected?.slug || '', description: selected?.description || '', status: selected?.status || 'active' }); setCategorySlugEdited(false); setShowCategorySlugEditor(false) }} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục. Hãy tạo chuyên mục đầu tiên." loading={selectorLoading} />
         <Field label="Tên chuyên mục"><input value={category.name} onChange={(event) => updateCategoryName(event.target.value)} /></Field>
-        <Field label="Đường dẫn (Slug) – tự tạo" help="Đường dẫn được tự tạo từ tên chuyên mục. Bạn có thể chỉnh nếu cần."><input value={category.slug} onChange={(event) => updateCategorySlug(event.target.value)} /></Field>
-        <Field label="Mô tả"><textarea rows="2" value={category.description} onChange={(event) => setCategory({ ...category, description: event.target.value })} /></Field>
-        <AccessFields value={category} onChange={setCategory} allowInherit={false} />
+        <div><GeneratedSlug value={category.slug} customized={categorySlugEdited} source="tên chuyên mục" onCustomize={() => setShowCategorySlugEditor(true)} />{showCategorySlugEditor && <Field label="Đường dẫn tùy chỉnh"><input value={category.slug} onChange={(event) => updateCategorySlug(event.target.value)} /></Field>}</div>
+        <Field label="Mô tả (tùy chọn)"><textarea rows="2" value={category.description} onChange={(event) => setCategory({ ...category, description: event.target.value })} /></Field>
+        <AdvancedDisclosure title="Tùy chọn nâng cao: Chính sách truy cập" description="Mặc định: Công khai."><p className="news-help">Mặc định: chuyên mục được phép truy cập công khai.</p><AccessFields value={category} onChange={setCategory} allowInherit={false} /></AdvancedDisclosure>
         <Field label="Trạng thái"><select value={category.status} onChange={(event) => setCategory({ ...category, status: event.target.value })}><option value="active">Đang hoạt động</option><option value="disabled">Đã tắt</option></select></Field>
       </div>
       {!selectorLoading && !categories.length && <EmptyState title="Chưa có chuyên mục." action={<button className="news-inline-link" type="button" onClick={scrollToCategoryManagement}>Hãy tạo chuyên mục đầu tiên</button>}>Chuyên mục giúp bạn sắp xếp bài viết theo chủ đề.</EmptyState>}
