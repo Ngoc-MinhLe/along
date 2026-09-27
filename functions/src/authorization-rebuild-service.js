@@ -9,6 +9,7 @@ const {
   validatedRoleEntry,
   readProfile,
   readUserAuthorization,
+  normalizeCustomRoleIds,
   invokeTrusted: invokeCustomRoleTrusted,
 } = require('./custom-role-service')
 
@@ -73,6 +74,17 @@ function assertAdditiveAuthorizationChange(current, next) {
   }
 }
 
+function assertProtectedProfileConsistency(planProfile, data) {
+  const customRoles = normalizeCustomRoleIds(data?.customRoles)
+  if (data?.uid !== planProfile.uid
+    || data.status !== 'active'
+    || data.systemRole !== planProfile.systemRole
+    || !sameSet(customRoles, planProfile.customRoles)) {
+    failedPrecondition(`Protected user ${planProfile.uid} changed during authorization rebuild.`)
+  }
+  return customRoles
+}
+
 async function commitAuthorizationPlan(plan, db = adminDb) {
   let updated = false
   await db.runTransaction(async (transaction) => {
@@ -84,13 +96,7 @@ async function commitAuthorizationPlan(plan, db = adminDb) {
     ])
     if (!profileSnapshot.exists) failedPrecondition(`Protected user ${plan.profile.uid} no longer exists.`)
     const data = profileSnapshot.data()
-    const customRoles = data?.customRoles
-    if (data?.uid !== plan.profile.uid
-      || data.status !== 'active'
-      || data.systemRole !== plan.profile.systemRole
-      || !sameSet(customRoles, plan.profile.customRoles)) {
-      failedPrecondition(`Protected user ${plan.profile.uid} changed during authorization rebuild.`)
-    }
+    const customRoles = assertProtectedProfileConsistency(plan.profile, data)
     const profile = { ...data, uid: plan.profile.uid, customRoles: [...customRoles] }
     const currentAuthorization = authorizationSnapshot.exists ? authorizationSnapshot.data() : null
     validateCurrentAuthorization(currentAuthorization, profile)
@@ -167,5 +173,6 @@ async function invokeTrusted(request, handler) {
 module.exports = {
   rebuildProtectedSystemRoleAuthorizations,
   invokeTrusted,
+  assertProtectedProfileConsistency,
   PROTECTED_SYSTEM_ROLES,
 }

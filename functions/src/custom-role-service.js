@@ -34,6 +34,14 @@ function failedPrecondition(message) {
   throw new HttpsError('failed-precondition', message)
 }
 
+function normalizeCustomRoleIds(value) {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.some((roleId) => typeof roleId !== 'string' || roleId.length === 0)) {
+    failedPrecondition('The target user customRoles field is invalid.')
+  }
+  return [...new Set(value)]
+}
+
 function alreadyExists(message) {
   throw new HttpsError('already-exists', message)
 }
@@ -161,11 +169,7 @@ async function readProfile(uid, db = adminDb) {
   if (!profile || profile.uid !== uid) failedPrecondition('The target user profile is inconsistent.')
   if (profile.status !== 'active') failedPrecondition('The target user is not active.')
   if (!SYSTEM_ROLE_SET.has(profile.systemRole)) failedPrecondition('The target user has an invalid System Role.')
-  const customRoles = profile.customRoles || []
-  if (!Array.isArray(customRoles) || customRoles.some((roleId) => typeof roleId !== 'string')) {
-    failedPrecondition('The target user customRoles field is invalid.')
-  }
-  return { ...profile, uid, customRoles: [...new Set(customRoles)] }
+  return { ...profile, uid, customRoles: normalizeCustomRoleIds(profile.customRoles) }
 }
 
 async function readUserAuthorization(uid, db = adminDb) {
@@ -446,6 +450,7 @@ async function invokeTrusted(request, handler, operation) {
 module.exports = {
   buildAuthorizationData,
   planAuthorization,
+  normalizeCustomRoleIds,
   readRoleMap,
   validatedRoleEntry,
   readProfile,
