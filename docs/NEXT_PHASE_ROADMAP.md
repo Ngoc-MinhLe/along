@@ -1,5 +1,30 @@
 # Next Phase Roadmap — RBAC, System Role, News và các bước tiếp theo
 
+> **Documentation synchronization — Phase 10.11A (2026-09-27)**
+>
+> This roadmap contains historical planning records. The current production
+> status is Phase 10.10 **COMPLETED/CLOSED** after authorization rebuild,
+> News Functions deployment and restore smoke verification.
+>
+> **PHASE 10.11 SPECIFICATION: NOT FOUND.** No feature, module or technical
+> scope is approved for Phase 10.11. The items listed later as Phase 10.6,
+> 10.7 and 10.8 are backlog/options only and must not be treated as the next
+> implementation phase without explicit approval. Legacy Phase 10.5 current-phase
+> statements later in this file are historical and superseded by Phase 10.10.
+
+## Current roadmap status
+
+- Phase 10.10: **COMPLETED/CLOSED**.
+- Phase 10.11: **NO OFFICIAL SPECIFICATION**.
+- Production authorization rebuild: completed for the protected system roles.
+- Production News Functions: deployed and source-synchronized.
+- News archive -> restore smoke test: passed; restored article is `draft`.
+- `NEWS_ARTICLE_UNARCHIVED` audit event: verified.
+- No new production mutation is authorized by this documentation update.
+
+Historical Phase 10.10B/C sections below are retained to preserve the record
+of their earlier BLOCKED/PENDING checkpoints.
+
 ## Phase 10.10 — News Article Restore / Unarchive
 
 - Status: **COMPLETED locally; not deployed**.

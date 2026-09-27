@@ -1,5 +1,35 @@
 # PROJECT STATUS
 
+> **Documentation synchronization — Phase 10.11A (2026-09-27)**
+>
+> The older snapshot sections below are preserved as historical phase records.
+> They are superseded by this current status after the completed Phase 10.10
+> production verification.
+
+## Authoritative Current Snapshot — Phase 10.10 CLOSED
+
+- Phase 10.10 — News Article Restore / Unarchive: **COMPLETED and CLOSED**.
+- `unarchiveNewsArticle` is deployed and active in Firebase project
+  `along-6e1ce`, region `us-central1`, Node.js 22, Gen 2.
+- `news.restore` is materialized in production for the protected system roles.
+- ROOT_ADMIN production authorization was verified with **31 permissions**,
+  including `news.restore`; the root lock and system role remain unchanged.
+- All 19 News Functions were redeployed from the same source hash and verified
+  active in production.
+- Production smoke test passed for article archive -> restore. Article
+  `O9Gz5Nw3d7Aqjy10KqIi` was restored from `archived` to `draft` without
+  changing its identity, title, slug, category, content, access policy or ACL.
+- Audit event `NEWS_ARTICLE_UNARCHIVED` was verified with the ROOT_ADMIN actor.
+- Firestore Rules were not changed by Phase 10.10.
+- No further production News mutation is pending from Phase 10.10.
+- Current phase: **Phase 10.11A — Documentation synchronization**.
+- Phase 10.11: **NO OFFICIAL SPECIFICATION**. No implementation scope is
+  selected until the project owner provides and approves it.
+
+The Phase 10.10B/C reports below retain their historical BLOCKED/PENDING
+status at the time those checkpoints were executed; the later 10.10H–10.10L
+results are the final status.
+
 ## Authoritative Current Snapshot — Phase 10.10B
 
 - Phase 10.10 — News Article Restore / Unarchive: **COMPLETED locally**.
