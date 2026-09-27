@@ -19,6 +19,7 @@ const AUDIT_ACTIONS = Object.freeze({
   NEWS_ARTICLE_CREATED: 'NEWS_ARTICLE_CREATED',
   NEWS_ARTICLE_UPDATED: 'NEWS_ARTICLE_UPDATED',
   NEWS_ARTICLE_ARCHIVED: 'NEWS_ARTICLE_ARCHIVED',
+  NEWS_ARTICLE_UNARCHIVED: 'NEWS_ARTICLE_UNARCHIVED',
   NEWS_PUBLISHED: 'NEWS_PUBLISHED',
   NEWS_UNPUBLISHED: 'NEWS_UNPUBLISHED',
   NEWS_ACCESS_POLICY_CHANGED: 'NEWS_ACCESS_POLICY_CHANGED',
@@ -26,6 +27,7 @@ const AUDIT_ACTIONS = Object.freeze({
   NEWS_CATEGORY_UPDATED: 'NEWS_CATEGORY_UPDATED',
   NEWS_CATEGORY_DELETED: 'NEWS_CATEGORY_DELETED',
   NEWS_ACL_CHANGED: 'NEWS_ACL_CHANGED',
+  AUTHORIZATION_REBUILT: 'AUTHORIZATION_REBUILT',
 })
 
 const OPERATION_ACTIONS = Object.freeze({
@@ -41,6 +43,7 @@ const OPERATION_ACTIONS = Object.freeze({
   createNewsArticle: AUDIT_ACTIONS.NEWS_ARTICLE_CREATED,
   updateNewsArticle: AUDIT_ACTIONS.NEWS_ARTICLE_UPDATED,
   archiveNewsArticle: AUDIT_ACTIONS.NEWS_ARTICLE_ARCHIVED,
+  unarchiveNewsArticle: AUDIT_ACTIONS.NEWS_ARTICLE_UNARCHIVED,
   publishNewsArticle: AUDIT_ACTIONS.NEWS_PUBLISHED,
   unpublishNewsArticle: AUDIT_ACTIONS.NEWS_UNPUBLISHED,
   setNewsAccessPolicy: AUDIT_ACTIONS.NEWS_ACCESS_POLICY_CHANGED,
@@ -49,6 +52,7 @@ const OPERATION_ACTIONS = Object.freeze({
   deleteNewsCategory: AUDIT_ACTIONS.NEWS_CATEGORY_DELETED,
   setNewsAclEntry: AUDIT_ACTIONS.NEWS_ACL_CHANGED,
   removeNewsAclEntry: AUDIT_ACTIONS.NEWS_ACL_CHANGED,
+  rebuildProtectedSystemRoleAuthorizations: AUDIT_ACTIONS.AUTHORIZATION_REBUILT,
 })
 
 const DENIED_ERROR_CODES = new Set([
@@ -82,6 +86,8 @@ function operationContext(operation, data = {}, result = {}) {
   if (operation === 'setSystemRole' && safeId(data.targetSystemRole)) metadata.targetSystemRole = data.targetSystemRole
   if (operation === 'setSystemRole' && safeId(result.previousSystemRole)) metadata.previousSystemRole = result.previousSystemRole
   if (Number.isSafeInteger(result.affectedUserCount)) metadata.affectedUserCount = result.affectedUserCount
+  if (Number.isSafeInteger(result.updatedUserCount)) metadata.updatedUserCount = result.updatedUserCount
+  if (Number.isSafeInteger(result.unchangedUserCount)) metadata.unchangedUserCount = result.unchangedUserCount
   if (operation === 'setNewsAclEntry' || operation === 'removeNewsAclEntry') {
     if (safeId(data.scope)) metadata.scope = data.scope
     if (safeId(data.principalType)) metadata.principalType = data.principalType

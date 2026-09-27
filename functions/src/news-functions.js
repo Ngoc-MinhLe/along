@@ -20,6 +20,7 @@ const listNewsGroups = trustedNewsReadCallable(service.listNewsGroups)
 const createNewsArticle = trustedNewsMutationCallable(mutationService.createNewsArticle, 'createNewsArticle')
 const updateNewsArticle = trustedNewsMutationCallable(mutationService.updateNewsArticle, 'updateNewsArticle')
 const archiveNewsArticle = trustedNewsMutationCallable(mutationService.archiveNewsArticle, 'archiveNewsArticle')
+const unarchiveNewsArticle = trustedNewsMutationCallable(mutationService.unarchiveNewsArticle, 'unarchiveNewsArticle')
 const publishNewsArticle = trustedNewsMutationCallable(mutationService.publishNewsArticle, 'publishNewsArticle')
 const unpublishNewsArticle = trustedNewsMutationCallable(mutationService.unpublishNewsArticle, 'unpublishNewsArticle')
 const setNewsAccessPolicy = trustedNewsMutationCallable(mutationService.setNewsAccessPolicy, 'setNewsAccessPolicy')
@@ -40,6 +41,7 @@ module.exports = {
   createNewsArticle,
   updateNewsArticle,
   archiveNewsArticle,
+  unarchiveNewsArticle,
   publishNewsArticle,
   unpublishNewsArticle,
   setNewsAccessPolicy,

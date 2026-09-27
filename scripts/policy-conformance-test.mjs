@@ -7,6 +7,7 @@ import {
   ROLE_PERMISSIONS as FRONTEND_ROLE_PERMISSIONS,
   canManageRole,
   getEffectivePermissions,
+  validateCustomRole,
 } from '../src/services/rbac/policy.js'
 import { ROLE_HIERARCHY, SYSTEM_ROLES } from '../src/services/rbac/roles.js'
 
@@ -38,6 +39,7 @@ assert.deepEqual(sorted(expectedRoles), sorted(Object.values(backendPolicy.SYSTE
 assert.deepEqual(ROLE_HIERARCHY, backendPolicy.ROLE_HIERARCHY)
 assert.deepEqual(sorted(PERMISSION_VALUES), sorted(backendPolicy.PERMISSIONS))
 assert.deepEqual(sorted(FRONTEND_FORBIDDEN_PERMISSIONS), sorted(backendPolicy.CUSTOM_ROLE_FORBIDDEN_PERMISSIONS))
+assert.equal(backendPolicy.FORBIDDEN_CUSTOM_PERMISSION_SET.has('news.restore'), true)
 
 for (const role of expectedRoles) {
   assert.deepEqual(
@@ -94,6 +96,12 @@ const examRole = {
 }
 assert.equal(canDelegate(adminPermissions, examRole, 'assign'), false)
 assert.equal(canDelegate(backendPolicy.ROLE_PERMISSIONS.SUPER_ADMIN, newsRole, 'assign'), true)
+assert.equal(validateCustomRole({
+  id: 'NEWS_RESTORER',
+  type: 'CUSTOM',
+  status: 'active',
+  permissions: ['news.restore'],
+}).length > 0, true)
 
 // ROOT is still the highest trust boundary, but malformed/forbidden roles are
 // rejected by the helper before the Root shortcut can apply.

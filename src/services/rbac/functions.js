@@ -66,3 +66,7 @@ export function updateUserProfile(targetUid, fields) {
   }
   return callFunction('updateUserProfile', payload)
 }
+
+export function rebuildProtectedSystemRoleAuthorizations() {
+  return callFunction('rebuildProtectedSystemRoleAuthorizations', {})
+}

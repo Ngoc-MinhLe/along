@@ -446,6 +446,8 @@ async function invokeTrusted(request, handler, operation) {
 module.exports = {
   buildAuthorizationData,
   planAuthorization,
+  readRoleMap,
+  validatedRoleEntry,
   readProfile,
   readUserAuthorization,
   createCustomRole,

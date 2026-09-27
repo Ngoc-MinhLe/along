@@ -273,7 +273,7 @@ function managementArticleData(snapshot, articleId, { includeContent = false } =
 }
 
 async function listNewsManagement(actor, data, db = adminDb) {
-  requireAnyPermission(actor, ['news.read', 'news.create', 'news.update', 'news.delete', 'news.publish'])
+  requireAnyPermission(actor, ['news.read', 'news.create', 'news.update', 'news.delete', 'news.publish', 'news.restore'])
   const payload = normalizeSelectorPayload(data)
   const queryText = payload.query.toLowerCase()
   let query = db.collection('newsArticles')
@@ -293,7 +293,7 @@ async function listNewsManagement(actor, data, db = adminDb) {
 }
 
 async function getNewsManagementArticle(actor, data, db = adminDb) {
-  requireAnyPermission(actor, ['news.read', 'news.create', 'news.update', 'news.delete', 'news.publish'])
+  requireAnyPermission(actor, ['news.read', 'news.create', 'news.update', 'news.delete', 'news.publish', 'news.restore'])
   const articleId = normalizeArticleId(data)
   const snapshot = await db.doc(`newsArticles/${articleId}`).get()
   return { ok: true, article: managementArticleData(snapshot, articleId, { includeContent: true }) }

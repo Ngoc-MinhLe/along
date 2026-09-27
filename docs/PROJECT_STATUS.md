@@ -1,5 +1,44 @@
 # PROJECT STATUS
 
+## Authoritative Current Snapshot — Phase 10.10B
+
+- Phase 10.10 — News Article Restore / Unarchive: **COMPLETED locally**.
+- Phase 10.10B deployment: **Firebase Function deployed successfully**.
+- `unarchiveNewsArticle`: **ACTIVE**, Node.js 22, Gen 2, `us-central1`.
+- Production authorization: **BLOCKED pending explicit authorization rebuild**. Read-only verification found 2 `SUPER_ADMIN` and 1 `ROOT_ADMIN` authorization documents with the previous 30-permission materialization; none yet contains `news.restore`.
+- Production UI smoke test: **PENDING**. No authenticated restore action was performed.
+- Production data changes: **none**. No article was restored, created, edited or deleted.
+- Firestore Rules: **not changed or deployed**.
+- Commit/push: **not performed**.
+- Next checkpoint: **Phase 10.10C — Production Authorization Rebuild Approval & Restore Smoke Test**.
+
+Detailed report: `docs/PHASE_10_10B_REPORT.md`.
+
+## Authoritative Current Snapshot — Phase 10.10C
+
+- Phase 10.10C authorization rebuild: **BLOCKED** because `RBAC_ROOT_ID_TOKEN` is not configured in the local process.
+- Read-only production comparison identified exactly two `SUPER_ADMIN` UIDs and one `ROOT_ADMIN` UID. Each has the expected 30 legacy permissions and is missing only `news.restore`.
+- No authorization rebuild was executed and no production document was written.
+- Next action: configure a fresh ROOT ID token locally, run the existing dry-run, then perform the explicit approval-gated rebuild for only the three identified UIDs.
+
+Detailed report: `docs/PHASE_10_10C_REPORT.md`.
+
+
+## Authoritative Current Snapshot — Phase 10.10
+
+- Current phase: **Phase 10.10 — News Article Restore / Unarchive — COMPLETED locally**.
+- `news.restore` is a system permission. Under the current catalog model it is
+  granted to `SUPER_ADMIN` and `ROOT_ADMIN`, not to `ADMIN`, `EDITOR`, `USER`,
+  or Custom Roles.
+- `unarchiveNewsArticle` is implemented locally/emulator-only. It changes an
+  archived article to `draft`, never directly to `published`, preserves the
+  article data/ACL/access policy and records `NEWS_ARTICLE_UNARCHIVED`.
+- Production deployment and production data changes: **none**.
+- Next proposed checkpoint: **Phase 10.10B — Restore Production Deployment &
+  Smoke Test**, after review and authorization-materialization planning.
+
+Last reviewed: 2026-09-25
+
 ## Current Phase Snapshot
 
 - Phase 10.9 - News Article Delete / Archive Foundation: **COMPLETED locally**.

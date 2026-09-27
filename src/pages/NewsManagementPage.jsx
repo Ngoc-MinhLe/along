@@ -5,7 +5,7 @@ import SearchableSelect from '../components/SearchableSelect'
 import { makeSlug } from '../utils/slug'
 import {
   createNewsArticle, updateNewsArticle, publishNewsArticle, unpublishNewsArticle,
-  archiveNewsArticle,
+  archiveNewsArticle, unarchiveNewsArticle,
   setNewsAccessPolicy, createNewsCategory, updateNewsCategory, deleteNewsCategory,
   setNewsAclEntry, removeNewsAclEntry, listNewsManagement, getNewsManagementArticle,
   listNewsCategories, listNewsUsers, listNewsGroups,
@@ -100,6 +100,7 @@ export default function NewsManagementPage() {
   const canUpdate = hasPermission(PERMISSIONS.NEWS_UPDATE)
   const canDelete = hasPermission(PERMISSIONS.NEWS_DELETE)
   const canPublish = hasPermission(PERMISSIONS.NEWS_PUBLISH)
+  const canRestore = hasPermission(PERMISSIONS.NEWS_RESTORE)
   const [draftArticle, setDraftArticle] = useState(emptyArticle)
   const [draftSlugEdited, setDraftSlugEdited] = useState(false)
   const [showDraftSlugEditor, setShowDraftSlugEditor] = useState(false)
@@ -111,6 +112,7 @@ export default function NewsManagementPage() {
   const [selectedArticleId, setSelectedArticleId] = useState('')
   const [previewArticle, setPreviewArticle] = useState(null)
   const [archiveConfirmation, setArchiveConfirmation] = useState(null)
+  const [restoreConfirmation, setRestoreConfirmation] = useState(null)
   const [category, setCategory] = useState(emptyCategory)
   const [categorySlugEdited, setCategorySlugEdited] = useState(false)
   const [showCategorySlugEditor, setShowCategorySlugEditor] = useState(false)
@@ -134,7 +136,7 @@ export default function NewsManagementPage() {
   const editorRef = useRef(null)
   const editorRequestRef = useRef(0)
 
-  const canReadManagementResources = canCreate || canUpdate || canDelete || canPublish
+  const canReadManagementResources = canCreate || canUpdate || canDelete || canPublish || canRestore
   const aclResourceOptions = useMemo(() => acl.scope === 'ARTICLE' ? articles : categories, [acl.scope, articles, categories])
   const principalOptions = acl.principalType === 'USER' ? users : groups
 
@@ -161,10 +163,10 @@ export default function NewsManagementPage() {
     }
     loadSelectors()
     return () => { cancelled = true }
-  }, [canCreate, canUpdate, canDelete, canPublish, canReadManagementResources, selectorRefreshKey])
+  }, [canCreate, canUpdate, canDelete, canPublish, canReadManagementResources, canRestore, selectorRefreshKey])
 
   useEffect(() => {
-    if (!canUpdate && !canPublish && !canDelete) {
+    if (!canUpdate && !canPublish && !canDelete && !canRestore) {
       setArticles([])
       return undefined
     }
@@ -182,7 +184,7 @@ export default function NewsManagementPage() {
       }
     }, articleSearch.trim() ? 350 : 0)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [articleSearch, canUpdate, canDelete, canPublish, selectorRefreshKey])
+  }, [articleSearch, canUpdate, canDelete, canPublish, canRestore, selectorRefreshKey])
 
   useEffect(() => {
     if (!selectedArticleId || !editingArticle.articleId || editingLoading || !editorRef.current) return
@@ -362,6 +364,17 @@ export default function NewsManagementPage() {
     }, 'Đã đưa bài viết vào lưu trữ.')
   }
 
+  async function confirmRestore() {
+    const target = restoreConfirmation
+    if (!target) return
+    setRestoreConfirmation(null)
+    await runAction(async () => {
+      await unarchiveNewsArticle(target.articleId)
+      setSelectorRefreshKey((value) => value + 1)
+      await selectArticle(target.articleId)
+    }, 'Đã khôi phục bài viết về trạng thái Nháp.')
+  }
+
   function updateCategoryName(name) {
     setCategory((current) => ({ ...current, name, slug: categorySlugEdited ? current.slug : makeSlug(name) }))
   }
@@ -429,7 +442,7 @@ export default function NewsManagementPage() {
       <div className="news-workflow-actions"><button className="admin-secondary-button" type="button" disabled={busy} onClick={saveDraft}>Lưu nháp</button><button className="admin-secondary-button" type="button" disabled={busy} onClick={() => setPreviewArticle(draftArticle)}>Xem trước</button><button className="admin-primary-button" type="button" disabled={busy} onClick={publishDraft}>Đăng bài</button></div>
     </section>}
 
-    {(canUpdate || canPublish || canDelete) && <section className="news-management-card news-basic-card">
+    {(canUpdate || canPublish || canDelete || canRestore) && <section className="news-management-card news-basic-card">
       <SectionHeader icon="≡" title="Danh sách bài viết" subtitle="Tìm một bài viết đã tồn tại rồi mở phần chỉnh sửa. Chỉ tải tối đa 20 kết quả mỗi lần tìm." />
       <div className="news-article-search-toolbar">
         <label className="news-article-search-field"><span>Tìm bài viết theo tiêu đề</span><input type="search" value={articleSearch} onChange={(event) => setArticleSearch(event.target.value)} placeholder="Nhập tiêu đề cần tìm..." /></label>
@@ -450,7 +463,7 @@ export default function NewsManagementPage() {
           <Field label="Mô tả ngắn (tùy chọn)"><textarea rows="3" value={editingArticle.excerpt} onChange={(event) => setEditingArticle({ ...editingArticle, excerpt: event.target.value })} disabled={!canUpdate || editingArticle.status === 'archived'} /></Field>
           <ContentEditor value={editingArticle.content} onChange={(content) => setEditingArticle({ ...editingArticle, content })} disabled={!canUpdate || editingArticle.status === 'archived'} />
         </div>
-        <div className="news-workflow-actions">{canUpdate && editingArticle.status !== 'archived' && <button className="admin-primary-button" type="button" disabled={busy} onClick={saveEditing}>Lưu thay đổi</button>}{canPublish && editingArticle.status !== 'published' && editingArticle.status !== 'archived' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={publishEditing}>Đăng bài</button>}{canPublish && editingArticle.status === 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={unpublishEditing}>Gỡ xuất bản</button>}{canDelete && editingArticle.status !== 'archived' && <button className="admin-danger-button" type="button" disabled={busy} onClick={() => setArchiveConfirmation({ articleId: editingArticle.articleId, title: editingArticle.title, status: editingArticle.status })}>Đưa vào lưu trữ</button>}<button className="admin-secondary-button" type="button" disabled={busy} onClick={() => selectArticle('')}>Hủy</button></div>
+        <div className="news-workflow-actions">{canUpdate && editingArticle.status !== 'archived' && <button className="admin-primary-button" type="button" disabled={busy} onClick={saveEditing}>Lưu thay đổi</button>}{canPublish && editingArticle.status !== 'published' && editingArticle.status !== 'archived' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={publishEditing}>Đăng bài</button>}{canPublish && editingArticle.status === 'published' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={unpublishEditing}>Gỡ xuất bản</button>}{canDelete && editingArticle.status !== 'archived' && <button className="admin-danger-button" type="button" disabled={busy} onClick={() => setArchiveConfirmation({ articleId: editingArticle.articleId, title: editingArticle.title, status: editingArticle.status })}>Đưa vào lưu trữ</button>}{canRestore && editingArticle.status === 'archived' && <button className="admin-secondary-button" type="button" disabled={busy} onClick={() => setRestoreConfirmation({ articleId: editingArticle.articleId, title: editingArticle.title })}>Khôi phục</button>}<button className="admin-secondary-button" type="button" disabled={busy} onClick={() => selectArticle('')}>Hủy</button></div>
       </div>}
     </section>}
 
@@ -484,7 +497,8 @@ export default function NewsManagementPage() {
     </section>}
 
     {previewArticle && <div className="news-preview-backdrop" role="presentation" onClick={() => setPreviewArticle(null)}><article className="news-preview-panel" role="dialog" aria-modal="true" aria-labelledby="news-preview-title" onClick={(event) => event.stopPropagation()}><div className="news-preview-header"><span className="news-status-badge draft">Bản xem trước</span><button className="close-button" type="button" onClick={() => setPreviewArticle(null)} aria-label="Đóng xem trước">×</button></div><p className="eyebrow">{policyLabel(makePolicy(previewArticle.mode, previewArticle.minVipLevel))}</p><h3 id="news-preview-title">{previewArticle.title || 'Chưa có tiêu đề'}</h3>{previewArticle.excerpt && <p className="news-article-excerpt">{previewArticle.excerpt}</p>}<div className="news-preview-content">{previewArticle.content || 'Chưa có nội dung.'}</div></article></div>}
-    {archiveConfirmation && <div className="news-confirm-backdrop" role="presentation" onClick={() => !busy && setArchiveConfirmation(null)}><div className="news-confirm-panel" role="dialog" aria-modal="true" aria-labelledby="news-archive-title" onClick={(event) => event.stopPropagation()}><p className="eyebrow">LƯU TRỮ BÀI VIẾT</p><h3 id="news-archive-title">Đưa bài viết vào lưu trữ?</h3><p><strong>{archiveConfirmation.title || 'Bài viết không có tiêu đề'}</strong></p><p>Trạng thái hiện tại: {statusLabel(archiveConfirmation.status)}.</p><p className="news-confirm-warning">Bài viết sẽ không còn xuất hiện với người đọc công khai. Dữ liệu và ACL được giữ lại để bảo toàn lịch sử. Thao tác này hiện chưa có chức năng khôi phục trên giao diện.</p><div className="news-action-row"><button className="admin-secondary-button" type="button" disabled={busy} onClick={() => setArchiveConfirmation(null)}>Hủy</button><button className="admin-danger-button" type="button" disabled={busy} onClick={confirmArchive}>{busy ? 'Đang lưu trữ...' : 'Xác nhận lưu trữ'}</button></div></div></div>}
+    {archiveConfirmation && <div className="news-confirm-backdrop" role="presentation" onClick={() => !busy && setArchiveConfirmation(null)}><div className="news-confirm-panel" role="dialog" aria-modal="true" aria-labelledby="news-archive-title" onClick={(event) => event.stopPropagation()}><p className="eyebrow">LƯU TRỮ BÀI VIẾT</p><h3 id="news-archive-title">Đưa bài viết vào lưu trữ?</h3><p><strong>{archiveConfirmation.title || 'Bài viết không có tiêu đề'}</strong></p><p>Trạng thái hiện tại: {statusLabel(archiveConfirmation.status)}.</p><p className="news-confirm-warning">Bài viết sẽ không còn xuất hiện với người đọc công khai. Dữ liệu và ACL được giữ lại để bảo toàn lịch sử.</p><div className="news-action-row"><button className="admin-secondary-button" type="button" disabled={busy} onClick={() => setArchiveConfirmation(null)}>Hủy</button><button className="admin-danger-button" type="button" disabled={busy} onClick={confirmArchive}>{busy ? 'Đang lưu trữ...' : 'Xác nhận lưu trữ'}</button></div></div></div>}
+    {restoreConfirmation && <div className="news-confirm-backdrop" role="presentation" onClick={() => !busy && setRestoreConfirmation(null)}><div className="news-confirm-panel" role="dialog" aria-modal="true" aria-labelledby="news-restore-title" onClick={(event) => event.stopPropagation()}><p className="eyebrow">KHÔI PHỤC BÀI VIẾT</p><h3 id="news-restore-title">Khôi phục bài viết?</h3><p><strong>{restoreConfirmation.title || 'Bài viết không có tiêu đề'}</strong></p><p className="news-confirm-warning">Bài viết sẽ chuyển từ <strong>Đã lưu trữ</strong> về <strong>Nháp</strong> và sẽ <strong>không tự động công khai</strong>.</p><div className="news-action-row"><button className="admin-secondary-button" type="button" disabled={busy} onClick={() => setRestoreConfirmation(null)}>Hủy</button><button className="admin-primary-button" type="button" disabled={busy} onClick={confirmRestore}>{busy ? 'Đang khôi phục...' : 'Xác nhận khôi phục'}</button></div></div></div>}
   </section>
 }
 

@@ -5,7 +5,7 @@ import { getPermissionMetadata, PERMISSION_GROUP_LABELS, PERMISSIONS, PERMISSION
 import { canManageUserRole, getDelegationScope, getEffectivePermissions, getRoleDelegationPreview, getSystemRole, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { getSystemRoleMetadata, ROLE_HIERARCHY, SYSTEM_ROLES } from '../services/rbac/roles'
 import { listCustomRoles, listUsers } from '../services/rbac/firestore'
-import { assignCustomRole, revokeCustomRole, setSystemRole, updateUserProfile } from '../services/rbac/functions'
+import { assignCustomRole, rebuildProtectedSystemRoleAuthorizations, revokeCustomRole, setSystemRole, updateUserProfile } from '../services/rbac/functions'
 
 const PAGE_SIZE = 25
 const STATUS_OPTIONS = ['active', 'suspended', 'deletion_requested', 'deleted']
@@ -226,6 +226,28 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function rebuildProtectedAuthorizations() {
+    if (!canManageSystemRole) {
+      setError('Chỉ ROOT_ADMIN mới có thể đồng bộ authorization hệ thống.')
+      return
+    }
+    const confirmed = window.confirm('Xác nhận đồng bộ lại authorization cho ROOT_ADMIN và SUPER_ADMIN từ policy server?')
+    if (!confirmed) return
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      const result = await rebuildProtectedSystemRoleAuthorizations()
+      setMessage(`Đã đồng bộ authorization: ${result.updatedUserCount || 0} tài khoản cập nhật, ${result.unchangedUserCount || 0} tài khoản đã đúng.`)
+    } catch (mutationError) {
+      setError(mutationError.code === 'permission-denied'
+        ? 'Bạn không có quyền đồng bộ authorization hệ thống.'
+        : mutationError.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return <section className="admin-users-page">
     <div className="admin-card admin-users-toolbar">
       <div className="admin-section-heading"><div><h3>Người dùng</h3><p>Quản lý hồ sơ, Custom Role và Effective Permissions theo quyền được cấp.</p></div><span className="admin-readonly">{filteredUsers.length} users</span></div>
@@ -239,6 +261,7 @@ export default function AdminUsersPage() {
       </div>
       {error && <p className="admin-error" role="alert">{error}</p>}
       {message && <p className="admin-success" role="status">{message}</p>}
+      {canManageSystemRole && <button type="button" className="admin-secondary-button" onClick={rebuildProtectedAuthorizations} disabled={busy}>Đồng bộ authorization ROOT/SUPER</button>}
     </div>
 
     <div className="admin-card user-table-card">

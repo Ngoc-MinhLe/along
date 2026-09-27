@@ -12,7 +12,7 @@ const ALL_PERMISSIONS = [
   'users.read', 'users.create', 'users.update', 'users.delete',
   'roles.read', 'roles.create', 'roles.update', 'roles.disable', 'roles.delete', 'roles.assign', 'roles.revoke',
   'calendar.search', 'calendar.export', 'calendar.import',
-  'news.read', 'news.create', 'news.update', 'news.delete', 'news.publish',
+  'news.read', 'news.create', 'news.update', 'news.delete', 'news.publish', 'news.restore',
   'quiz.question.read', 'quiz.question.create', 'quiz.question.update', 'quiz.question.delete',
   'quiz.exam.create', 'quiz.exam.update', 'quiz.exam.publish', 'quiz.exam.delete',
   'approval.create', 'approval.review', 'audit.read',
@@ -141,6 +141,7 @@ async function main() {
   await denied(() => call('createCustomRole', rootToken, { actorUid: 'forged', name: 'Forged Role', permissions: ['news.read'] }), 'invalid-argument')
   await denied(() => call('createCustomRole', rootToken, { name: 'Invalid Permission', permissions: ['not.in.catalog'] }), 'invalid-argument')
   await denied(() => call('createCustomRole', rootToken, { name: 'Forbidden Permission', permissions: ['roles.create'] }), 'permission-denied')
+  await denied(() => call('createCustomRole', rootToken, { name: 'System Restore Permission', permissions: ['news.restore'] }), 'permission-denied')
   await denied(() => call('createCustomRole', rootToken, { name: 'USER', permissions: ['news.read'] }), 'invalid-argument')
   await denied(() => call('createCustomRole', rootToken, { name: 'ROOT ADMIN', permissions: ['news.read'] }), 'invalid-argument')
 

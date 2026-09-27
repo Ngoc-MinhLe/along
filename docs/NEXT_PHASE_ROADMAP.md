@@ -1,5 +1,22 @@
 # Next Phase Roadmap — RBAC, System Role, News và các bước tiếp theo
 
+## Phase 10.10 — News Article Restore / Unarchive
+
+- Status: **COMPLETED locally; not deployed**.
+- Added system permission `news.restore`. The existing policy gives it to
+  `SUPER_ADMIN` and `ROOT_ADMIN`; Custom Roles are explicitly forbidden from
+  containing it.
+- Added trusted callable `unarchiveNewsArticle({ articleId })`.
+- The server derives the actor from Firebase Auth, requires `news.restore`,
+  reads the article in a transaction, and permits only `archived -> draft`.
+- Content, title, slug, category, access policy and ACL are preserved. Restore
+  does not publish the article automatically.
+- Added the `NEWS_ARTICLE_UNARCHIVED` audit action and frontend confirmation/
+  refresh flow.
+- Firestore Rules were not changed. Production data was not changed.
+- Next proposed checkpoint: **Phase 10.10B — Restore Production Deployment &
+  Smoke Test**.
+
 Ngày audit: 2026-09-24
 Phạm vi: audit source/repository và lập roadmap.
 Trạng thái thay đổi: chỉ tạo tài liệu này; không sửa source code, Firestore Rules, production data, deployment hoặc Git history.
@@ -1084,3 +1101,27 @@ Phase 10.1, Phase 10.2 và Phase 10.3 đã COMPLETED ở local checkpoint. Phase
 - Current phase: **Phase 10.5 — COMPLETED locally**.
 - Next proposed implementation phase: **Phase 10.6 — News Entitlement / Group /
   Subscription Foundation**.
+
+## Phase 10.10B — Restore Production Deployment & Controlled Smoke Test
+
+Status: **BLOCKED pending authorization materialization approval**.
+
+- `unarchiveNewsArticle` was deployed successfully to `along-6e1ce`, `us-central1`, Node.js 22, Gen 2.
+- Endpoint authentication and production-origin CORS were verified read-only.
+- Production `userAuthorizations` documents for the detected `SUPER_ADMIN` and `ROOT_ADMIN` users still contain the previous 30-permission materialization and do not yet contain `news.restore`.
+- No authorization rebuild or News article mutation was performed.
+- Next checkpoint: **Phase 10.10C — Production Authorization Rebuild Approval & Restore Smoke Test**.
+
+Detailed report: `docs/PHASE_10_10B_REPORT.md`.
+
+## Phase 10.10C — Production Authorization Rebuild
+
+Status: **BLOCKED pending local ROOT ID token**.
+
+- Read-only verification found exactly three affected production authorization documents: two `SUPER_ADMIN` and one `ROOT_ADMIN`.
+- Each is missing only `news.restore`; no existing permission is scheduled for removal.
+- The existing trusted rebuild command was audited, but no dry-run/write was executed because `RBAC_ROOT_ID_TOKEN` is not present locally.
+- No production data changed.
+- Next checkpoint: configure the token locally, run dry-run, then rebuild only the three approved authorization documents.
+
+Detailed report: `docs/PHASE_10_10C_REPORT.md`.

@@ -270,6 +270,38 @@ async function main() {
     articleId: created.articleId, title: 'Archived article must not change',
   }), 'failed-precondition')
 
+  // Restore is a separate system permission. It is not granted to ADMIN,
+  // EDITOR or USER and never accepts a client-supplied actor.
+  await denied(() => call('unarchiveNewsArticle', null, { articleId: created.articleId }), 'unauthenticated')
+  await denied(() => call('unarchiveNewsArticle', noReadToken, { articleId: created.articleId }), 'permission-denied')
+  await denied(() => call('unarchiveNewsArticle', editorToken, { articleId: created.articleId }), 'permission-denied')
+  await denied(() => call('unarchiveNewsArticle', adminToken, { articleId: created.articleId }), 'permission-denied')
+  await denied(() => call('unarchiveNewsArticle', superToken, {
+    actorUid: 'forged', articleId: created.articleId,
+  }), 'invalid-argument')
+
+  const preservedArticle = archivedSnapshot.data()
+  const restoredBySuper = await call('unarchiveNewsArticle', superToken, { articleId: created.articleId })
+  assert.equal(restoredBySuper.status, 'draft')
+  const restoredSnapshot = await db.doc(`newsArticles/${created.articleId}`).get()
+  const restoredData = restoredSnapshot.data()
+  assert.equal(restoredData.id, created.articleId)
+  assert.equal(restoredData.status, 'draft')
+  assert.equal(restoredData.title, preservedArticle.title)
+  assert.equal(restoredData.slug, preservedArticle.slug)
+  assert.equal(restoredData.content, preservedArticle.content)
+  assert.deepEqual(restoredData.accessPolicy, preservedArticle.accessPolicy)
+  assert.equal(restoredData.categoryId, preservedArticle.categoryId)
+  assert.equal(restoredData.publishedAt, null)
+  await denied(() => call('getNewsArticle', null, { articleId: created.articleId }), 'not-found')
+  await denied(() => call('unarchiveNewsArticle', superToken, { articleId: created.articleId }), 'failed-precondition')
+  await denied(() => call('unarchiveNewsArticle', superToken, { articleId: 'MISSING_ARTICLE' }), 'not-found')
+  await denied(() => call('unarchiveNewsArticle', superToken, { articleId: 'PUBLIC_ARTICLE' }), 'failed-precondition')
+
+  await call('archiveNewsArticle', adminToken, { articleId: created.articleId })
+  const restoredByRoot = await call('unarchiveNewsArticle', rootToken, { articleId: created.articleId })
+  assert.equal(restoredByRoot.status, 'draft')
+
   // Category, article ACL and group ACL mutations are server-side only.
   const specialCategory = await call('createNewsCategory', superToken, {
     name: 'Managed Special', defaultAccessPolicy: { mode: 'SPECIAL' },
@@ -330,7 +362,7 @@ async function main() {
   const auditEvents = (await db.collection('auditEvents').get()).docs.map((snapshot) => snapshot.data())
   for (const action of [
     'NEWS_ARTICLE_CREATED', 'NEWS_ARTICLE_UPDATED', 'NEWS_PUBLISHED',
-    'NEWS_UNPUBLISHED', 'NEWS_ARTICLE_ARCHIVED', 'NEWS_ACCESS_POLICY_CHANGED', 'NEWS_CATEGORY_CREATED',
+    'NEWS_UNPUBLISHED', 'NEWS_ARTICLE_ARCHIVED', 'NEWS_ARTICLE_UNARCHIVED', 'NEWS_ACCESS_POLICY_CHANGED', 'NEWS_CATEGORY_CREATED',
     'NEWS_CATEGORY_UPDATED', 'NEWS_ACL_CHANGED',
   ]) {
     assert.ok(auditEvents.some((event) => event.action === action && event.result === 'SUCCESS'), action)

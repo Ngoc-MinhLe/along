@@ -25,6 +25,7 @@
     "check:functions": "npm --prefix functions run check",
     "test:functions": "npm --prefix functions test",
     "test:functions:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-functions-audit \"node functions/test/custom-role-emulator.test.js\"",
+    "test:functions:authorization-rebuild:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-authorization-rebuild-audit \"node functions/test/authorization-rebuild-emulator.test.js\"",
     "test:functions:system-role:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-system-role-audit \"node functions/test/system-role-emulator.test.js\"",
     "test:functions:news:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-news-audit \"node functions/test/news-emulator.test.js\"",
     "test:functions:user:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-user-audit \"node functions/test/user-emulator.test.js\"",

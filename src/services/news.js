@@ -71,6 +71,10 @@ export function archiveNewsArticle(articleId) {
   return callNewsFunction('archiveNewsArticle', { articleId })
 }
 
+export function unarchiveNewsArticle(articleId) {
+  return callNewsFunction('unarchiveNewsArticle', { articleId })
+}
+
 export function publishNewsArticle(articleId) {
   return callNewsFunction('publishNewsArticle', { articleId })
 }

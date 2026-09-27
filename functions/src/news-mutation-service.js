@@ -368,6 +368,24 @@ async function archiveNewsArticle(actor, data, db = adminDb) {
   return { ok: true, operation: 'archiveNewsArticle', articleId, status: 'archived' }
 }
 
+async function unarchiveNewsArticle(actor, data, db = adminDb) {
+  requirePermission(actor, 'news.restore')
+  assertAllowedKeys(data, ['articleId'], ['articleId'])
+  const articleId = normalizeReferenceId(data.articleId, 'articleId')
+  await db.runTransaction(async (transaction) => {
+    const current = await readArticle(articleId, db, transaction)
+    if (current.status !== 'archived') {
+      failedPrecondition('Only archived News articles can be restored.')
+    }
+    transaction.update(articleRef(db, articleId), {
+      status: 'draft',
+      publishedAt: null,
+      updatedAt: Timestamp.now(),
+    })
+  })
+  return { ok: true, operation: 'unarchiveNewsArticle', articleId, status: 'draft' }
+}
+
 async function setNewsAccessPolicy(actor, data, db = adminDb) {
   requirePermission(actor, 'news.update')
   assertAllowedKeys(data, ['articleId', 'accessPolicy'], ['articleId', 'accessPolicy'])
@@ -529,6 +547,7 @@ module.exports = {
   unpublishNewsArticle: (actor, data, db) => setNewsArticlePublished(actor, data, false, db),
   setNewsAccessPolicy,
   archiveNewsArticle,
+  unarchiveNewsArticle,
   createNewsCategory,
   updateNewsCategory,
   deleteNewsCategory,
