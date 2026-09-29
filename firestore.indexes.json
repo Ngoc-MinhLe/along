@@ -16,6 +16,14 @@
         { "fieldPath": "categoryId", "order": "ASCENDING" },
         { "fieldPath": "publishedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "memberships",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

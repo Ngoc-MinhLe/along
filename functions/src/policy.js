@@ -37,6 +37,12 @@ const PERMISSIONS = Object.freeze([
   'news.delete',
   'news.publish',
   'news.restore',
+  'membership.read',
+  'membership.assign',
+  'membership.update',
+  'membership.revoke',
+  'entitlement.read',
+  'entitlement.manage',
   'quiz.question.read',
   'quiz.question.create',
   'quiz.question.update',
@@ -61,6 +67,12 @@ const CUSTOM_ROLE_FORBIDDEN_PERMISSIONS = Object.freeze([
   'roles.assign',
   'roles.revoke',
   'news.restore',
+  'membership.read',
+  'membership.assign',
+  'membership.update',
+  'membership.revoke',
+  'entitlement.read',
+  'entitlement.manage',
 ])
 
 const FORBIDDEN_CUSTOM_PERMISSION_SET = new Set(CUSTOM_ROLE_FORBIDDEN_PERMISSIONS)

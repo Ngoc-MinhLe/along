@@ -28,6 +28,8 @@ const AUDIT_ACTIONS = Object.freeze({
   NEWS_CATEGORY_DELETED: 'NEWS_CATEGORY_DELETED',
   NEWS_ACL_CHANGED: 'NEWS_ACL_CHANGED',
   AUTHORIZATION_REBUILT: 'AUTHORIZATION_REBUILT',
+  MEMBERSHIP_CREATED: 'MEMBERSHIP_CREATED',
+  MEMBERSHIP_REVOKED: 'MEMBERSHIP_REVOKED',
 })
 
 const OPERATION_ACTIONS = Object.freeze({
@@ -53,6 +55,8 @@ const OPERATION_ACTIONS = Object.freeze({
   setNewsAclEntry: AUDIT_ACTIONS.NEWS_ACL_CHANGED,
   removeNewsAclEntry: AUDIT_ACTIONS.NEWS_ACL_CHANGED,
   rebuildProtectedSystemRoleAuthorizations: AUDIT_ACTIONS.AUTHORIZATION_REBUILT,
+  createManualMembership: AUDIT_ACTIONS.MEMBERSHIP_CREATED,
+  revokeMembership: AUDIT_ACTIONS.MEMBERSHIP_REVOKED,
 })
 
 const DENIED_ERROR_CODES = new Set([
@@ -74,13 +78,16 @@ function reasonCode(error) {
 }
 
 function operationContext(operation, data = {}, result = {}) {
-  const targetUid = safeId(data.targetUid) || safeId(result.targetUid)
+  const targetUid = safeId(data.targetUid) || safeId(data.userId) || safeId(result.targetUid) || safeId(result.userId)
   const roleId = safeId(data.roleId) || safeId(data.customRoleId) || safeId(result.roleId)
   const articleId = safeId(data.articleId) || safeId(result.articleId)
   const categoryId = safeId(data.categoryId) || safeId(result.categoryId)
+  const membershipId = safeId(data.membershipId) || safeId(result.membershipId)
   const resourceId = safeId(data.resourceId) || safeId(result.resourceId)
-  const resourceType = operation.includes('News') ? 'NEWS' : operation.includes('CustomRole') ? 'CUSTOM_ROLE' : 'USER'
-  const resourceIdValue = roleId || articleId || categoryId || resourceId || targetUid
+  const resourceType = operation.includes('News') ? 'NEWS'
+    : operation.includes('CustomRole') ? 'CUSTOM_ROLE'
+      : operation.includes('Membership') ? 'MEMBERSHIP' : 'USER'
+  const resourceIdValue = membershipId || roleId || articleId || categoryId || resourceId || targetUid
   const metadata = {}
 
   if (operation === 'setSystemRole' && safeId(data.targetSystemRole)) metadata.targetSystemRole = data.targetSystemRole

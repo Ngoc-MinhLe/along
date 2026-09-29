@@ -1,5 +1,106 @@
 # PROJECT STATUS
 
+## Authoritative Current Snapshot - Phase 10.11G MEMBERSHIP PRODUCTION READINESS
+
+- Phase 10.10 - News Article Restore / Unarchive: **COMPLETED and CLOSED**.
+- Phase 10.11B - VIP / Entitlement Architecture Discovery & Design:
+  **COMPLETED - DESIGN ONLY**.
+- Phase 10.11C - VIP Architecture Decisions:
+  **COMPLETED - ARCHITECTURE DECISIONS ONLY**.
+- Phase 10.11D - VIP / Entitlement Architecture Finalization:
+  **COMPLETED - ARCHITECTURE FINALIZED**.
+- Phase 10.11E - VIP Membership Implementation Foundation:
+  **COMPLETED locally; not deployed**.
+- Phase 10.11F - Membership Administration & Read Workflow:
+  **COMPLETED locally; not deployed**.
+- Phase 10.11G - Membership Production Readiness & Deployment Review:
+  **COMPLETED - PRODUCTION READY (review only; not deployed)**.
+- Dynamic `membershipTiers/{tierId}` and canonical
+  `memberships/{membershipId}` backend foundations are implemented.
+- Trusted callable functions implemented:
+  `listMembershipTiers`, `listMemberships`, `getUserMemberships`,
+  `createManualMembership`, and `revokeMembership`.
+- Admin route `/admin/memberships` provides bounded membership listing,
+  per-user history, dynamic tier selection, manual create, and ACTIVE revoke.
+- Membership permissions were added to the synchronized backend/frontend
+  catalog. They are not Custom Role grants; only ROOT_ADMIN and SUPER_ADMIN
+  receive the management permissions through the existing system-role policy.
+- Membership mutations use the trusted actor, validate target/tier/date data,
+  enforce one ACTIVE membership per user, retain revoked history, and write
+  `MEMBERSHIP_CREATED`/`MEMBERSHIP_REVOKED` audit events.
+- News access evaluation, `contentEntitlements`, News Rules, News data,
+  payment, SPECIAL entitlement, group membership, and migration were not
+  changed in this phase.
+- Firestore Rules were not changed. Production data was not changed. No
+  deployment, commit, or push was performed.
+- Phase 10.11G review confirms the five Membership callables and the
+  `/admin/memberships` frontend are ready for a separately approved deploy.
+  The Membership composite index must be deployed before per-user history
+  queries are used in production. Rules do not require a deployment.
+- Current phase: **Phase 10.11G - PRODUCTION READY; checkpoint before explicit
+  deployment**.
+- Next phase proposal: **Membership production deployment and controlled smoke
+  test**, subject to explicit approval; News access integration, SPECIAL
+  entitlement, group membership and payment remain later work.
+
+## Authoritative Current Snapshot - Phase 10.11D ARCHITECTURE FINALIZED
+
+- Phase 10.10 - News Article Restore / Unarchive: **COMPLETED and CLOSED**.
+- Phase 10.11B - VIP / Entitlement Architecture Discovery & Design:
+  **COMPLETED - DESIGN ONLY**.
+- Phase 10.11C - VIP Architecture Decisions:
+  **COMPLETED - ARCHITECTURE DECISIONS ONLY**.
+- Phase 10.11D - VIP / Entitlement Architecture Finalization:
+  **ARCHITECTURE FINALIZED - IMPLEMENTATION NOT STARTED**.
+- Final architecture: `docs/PHASE_10_11D_ARCHITECTURE_FINAL.md`.
+- Canonical membership uses `memberships/{membershipId}` with `tierId`; tier
+  level is resolved from `membershipTiers/{tierId}`.
+- `contentEntitlements/{uid}` remains legacy fallback; canonical SPECIAL
+  grants use independent entitlement documents under `contentEntitlements`.
+- Manual scope is limited to `listMembershipTiers`,
+  `createManualMembership`, and `revokeMembership` in the next implementation.
+- No source code, Rules, production data, migration or deployment changed.
+- Current checkpoint: review the final architecture before implementation.
+
+## Authoritative Current Snapshot - Phase 10.11C DECISIONS RECORDED
+
+- Phase 10.10 - News Article Restore / Unarchive: **COMPLETED and CLOSED**.
+- Phase 10.11B - VIP / Entitlement Architecture Discovery & Design:
+  **COMPLETED - DESIGN ONLY**.
+- Phase 10.11C - Finalize VIP Architecture Decisions:
+  **COMPLETED - ARCHITECTURE DECISIONS ONLY**.
+- Decision record: `docs/PHASE_10_11C_ARCHITECTURE_DECISIONS.md`.
+- Canonical membership source: `memberships/{membershipId}`; Phase 1 permits
+  at most one active membership per user and retains historical records.
+- VIP tiers are dynamic data ordered by level; VIP is not an RBAC role or
+  permission.
+- PUBLIC, VIP-tier and SPECIAL access semantics, server-side enforcement,
+  expiration, manual management boundary, audit and backward compatibility are
+  recorded in the decision document.
+- No source code, Firestore Rules, production data, migration or deployment was
+  changed. Phase 10.11 implementation has **not started**.
+- Current checkpoint: owner review of the remaining open implementation
+  decisions before Phase 10.11 implementation.
+
+## Authoritative Current Snapshot - Phase 10.11B DESIGN COMPLETED
+
+- Phase 10.10 - News Article Restore / Unarchive: **COMPLETED and CLOSED**.
+- Phase 10.11B - VIP / Entitlement Architecture Discovery & Design:
+  **COMPLETED - DESIGN ONLY**.
+- The VIP/entitlement architecture is documented in
+  `docs/PHASE_10_11B_VIP_ARCHITECTURE.md`.
+- No VIP implementation, membership migration, entitlement mutation, group
+  workflow, payment integration, source-code change, Rules change, deployment,
+  or production data change was made in this phase.
+- Phase 10.11 implementation is **NOT approved/started**. It is waiting for
+  explicit decisions on the open design questions listed in the architecture
+  document.
+- Current phase: **Phase 10.11B - VIP Architecture Design completed**.
+- Next action: owner review and approval of the design/open decisions.
+
+The historical snapshots below are preserved. This current snapshot
+supersedes older statements that Phase 10.11 had no specification.
+
 > **Documentation synchronization — Phase 10.11A (2026-09-27)**
 >
 > The older snapshot sections below are preserved as historical phase records.

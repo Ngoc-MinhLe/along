@@ -8,6 +8,7 @@ export default function AdminLayout() {
   const { hasPermission, hasAnyPermission, loading: permissionsLoading, permissionError } = usePermissions()
   const canReadUsers = hasPermission(PERMISSIONS.USERS_READ)
   const canReadRoles = hasPermission(PERMISSIONS.ROLES_READ)
+  const canReadMemberships = hasPermission(PERMISSIONS.MEMBERSHIP_READ)
   const canManageNews = hasAnyPermission([PERMISSIONS.NEWS_CREATE, PERMISSIONS.NEWS_UPDATE, PERMISSIONS.NEWS_DELETE, PERMISSIONS.NEWS_PUBLISH])
   const canOpenAdmin = hasAnyPermission([
     PERMISSIONS.USERS_READ,
@@ -17,6 +18,7 @@ export default function AdminLayout() {
     PERMISSIONS.NEWS_UPDATE,
     PERMISSIONS.NEWS_DELETE,
     PERMISSIONS.NEWS_PUBLISH,
+    PERMISSIONS.MEMBERSHIP_READ,
   ])
 
   if (loading || permissionsLoading) return <div className="admin-loading">Đang kiểm tra quyền truy cập…</div>
@@ -36,6 +38,7 @@ export default function AdminLayout() {
         {canReadRoles && <Link to="/admin/roles">Vai trò</Link>}
         {canReadRoles && <Link to="/admin/permissions">Danh mục quyền</Link>}
         {canManageNews && <Link to="/admin/news">Tin tức</Link>}
+        {canReadMemberships && <Link to="/admin/memberships">Membership</Link>}
       </nav>
       <Outlet />
     </div>

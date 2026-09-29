@@ -10,6 +10,7 @@ import AdminPage from './pages/AdminPage'
 import AdminUsersPage from './pages/AdminUsersPage'
 import AdminRolesPage from './pages/AdminRolesPage'
 import AdminPermissionsPage from './pages/AdminPermissionsPage'
+import AdminMembershipsPage from './pages/AdminMembershipsPage'
 import NewsListPage from './pages/NewsListPage'
 import NewsArticlePage from './pages/NewsArticlePage'
 import NewsManagementPage from './pages/NewsManagementPage'
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="users" element={<PermissionGate permission={PERMISSIONS.USERS_READ}><AdminUsersPage /></PermissionGate>} />
           <Route path="roles" element={<PermissionGate permission={PERMISSIONS.ROLES_READ}><AdminRolesPage /></PermissionGate>} />
           <Route path="permissions" element={<PermissionGate permission={PERMISSIONS.ROLES_READ}><AdminPermissionsPage /></PermissionGate>} />
+          <Route path="memberships" element={<PermissionGate permission={PERMISSIONS.MEMBERSHIP_READ}><AdminMembershipsPage /></PermissionGate>} />
           <Route path="news" element={<PermissionGate any={NEWS_MANAGEMENT_PERMISSIONS}><NewsManagementPage /></PermissionGate>} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />

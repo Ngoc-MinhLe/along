@@ -2,20 +2,82 @@
 
 > **Documentation synchronization — Phase 10.11A (2026-09-27)**
 >
-> This roadmap contains historical planning records. The current production
-> status is Phase 10.10 **COMPLETED/CLOSED** after authorization rebuild,
-> News Functions deployment and restore smoke verification.
+> This roadmap contains historical planning records. Phase 10.10 is
+> **COMPLETED/CLOSED** in production; the current documentation checkpoint is
+> Phase 10.11G **PRODUCTION READY - REVIEW ONLY** after the local Membership
+> implementation and readiness review.
 >
-> **PHASE 10.11 SPECIFICATION: NOT FOUND.** No feature, module or technical
-> scope is approved for Phase 10.11. The items listed later as Phase 10.6,
-> 10.7 and 10.8 are backlog/options only and must not be treated as the next
-> implementation phase without explicit approval. Legacy Phase 10.5 current-phase
-> statements later in this file are historical and superseded by Phase 10.10.
+> **PHASE 10.11 MEMBERSHIP DEPLOYMENT: NOT EXECUTED.** Phase 10.11B-D are
+> architecture checkpoints, Phase 10.11E-F are implemented locally, and
+> Phase 10.11G is ready for an explicitly approved deployment. The items
+> listed later as Phase 10.6, 10.7 and 10.8 are historical/backlog options
+> only and must not be treated as the next implementation phase without
+> explicit approval. Legacy Phase 10.5 current-phase statements later in
+> this file are historical and superseded by Phase 10.10.
+
+## Current authoritative checkpoint - Phase 10.11G
+
+- Phase 10.10: **COMPLETED/CLOSED** in production.
+- Phase 10.11B/10.11C/10.11D: **COMPLETED** as architecture/design
+  checkpoints.
+- Phase 10.11E - VIP Membership Implementation Foundation:
+  **COMPLETED locally; not deployed**.
+- Phase 10.11F - Membership Administration & Read Workflow:
+  **COMPLETED locally; not deployed**.
+- Phase 10.11G - Membership Production Readiness & Deployment Review:
+  **COMPLETED - PRODUCTION READY (review only; not deployed)**.
+- Implemented dynamic tier reads and trusted manual membership create/revoke
+  callables, bounded admin membership reads, per-user history reads,
+  synchronized membership permissions, validation, single-active invariant,
+  history retention, and membership audit events.
+- Added `/admin/memberships` with permission-gated listing, dynamic tier
+  selection, manual create, per-user history, and ACTIVE revoke controls.
+- News access evaluator, legacy `contentEntitlements`, SPECIAL entitlement,
+  group membership, payment, migration, Firestore Rules, production data and
+  deployment were intentionally unchanged.
+- Current checkpoint: explicit approval is required before deploying the five
+  Membership Functions, the Membership composite index, and the updated
+  frontend. Firestore Rules do not require a deployment.
+- Next phase proposal: **Membership production deployment and controlled smoke
+  test**, not yet executed. News evaluator integration and SPECIAL
+  entitlement remain separate later scope.
+
+## Historical checkpoint - Phase 10.11D
+
+- Phase 10.11D - VIP / Entitlement Architecture Finalization:
+  **ARCHITECTURE FINALIZED - IMPLEMENTATION NOT STARTED**.
+- Final decision record: `docs/PHASE_10_11D_ARCHITECTURE_FINAL.md`.
+- Canonical membership uses `tierId`; VIP level is resolved from dynamic tier
+  data. Legacy `contentEntitlements/{uid}` remains a read fallback.
+- Initial implementation scope is limited to dynamic tier read, manual create,
+  and revoke membership for ROOT/SUPER, plus the shared News evaluator.
+- No source, Rules, production data, migration, deployment, commit, or push was
+  performed by Phase 10.11D.
+
+## Historical Phase 10.11C checkpoint
+
+- Phase 10.11B - VIP / Entitlement Architecture Discovery & Design:
+  **COMPLETED - DESIGN ONLY**.
+- Phase 10.11C - Finalize VIP Architecture Decisions:
+  **COMPLETED - ARCHITECTURE DECISIONS ONLY**.
+- Decision record: `docs/PHASE_10_11C_ARCHITECTURE_DECISIONS.md`.
+- Implementation has not started. The next implementation checkpoint remains
+  pending resolution of the open items in the decision record.
+- No source, Rules, production data, migration, deployment, commit, or push was
+  performed by Phase 10.11C.
 
 ## Current roadmap status
 
+- Phase 10.11B - VIP / Entitlement Architecture Discovery & Design:
+  **COMPLETED - DESIGN ONLY**.
+- Design document: `docs/PHASE_10_11B_VIP_ARCHITECTURE.md`.
+- No Phase 10.11 implementation is approved or started. No source, Rules,
+  production data, or deployment was changed by the design phase.
+- The next implementation checkpoint is intentionally **pending owner review**
+  of the open decisions in the design document.
+
 - Phase 10.10: **COMPLETED/CLOSED**.
-- Phase 10.11: **NO OFFICIAL SPECIFICATION**.
+- Phase 10.11 implementation: **DESIGN REVIEW PENDING; NOT APPROVED**.
 - Production authorization rebuild: completed for the protected system roles.
 - Production News Functions: deployed and source-synchronized.
 - News archive -> restore smoke test: passed; restored article is `draft`.
