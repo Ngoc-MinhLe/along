@@ -1,6 +1,35 @@
 # PROJECT STATUS
 
-## Authoritative Current Snapshot - Phase 10.11G MEMBERSHIP PRODUCTION READINESS
+## Authoritative Current Snapshot - Phase 10.11M ARCHITECTURE RECONCILIATION
+
+- Phase 10.10: **COMPLETED and CLOSED**.
+- Phase 10.11B–10.11D: **COMPLETED** as architecture/design checkpoints.
+- Phase 10.11E–10.11F: **COMPLETED locally; not deployed**.
+- Phase 10.11G: **BLOCKED at the historical review checkpoint** by a
+  documentation/implementation schema mismatch.
+- Phase 10.11J–10.11K: **LOCAL IMPLEMENTATION PASS; COMMITTED/PUSHED** for
+  Membership Tier Administration. This does not mean the Membership Functions
+  or frontend are deployed to production.
+- Phase 10.11M: **COMPLETED — DOCUMENTATION-ONLY RECONCILIATION**.
+- Canonical tier documents are stored at `membershipTiers/{tierId}` with
+  `tierId` equal to the document ID, `name`, positive integer `level`,
+  lower-case `status` (`active` or `inactive`), description and audit metadata.
+  A stored `active` boolean and `sortOrder` are not part of the canonical
+  schema; read responses may derive `active` from `status`.
+- Canonical membership documents remain at `memberships/{membershipId}` and
+  store `tierId` only; level is resolved from the tier document.
+- Dynamic tier levels remain separate from System Roles, Custom Roles and
+  `userAuthorizations`. News evaluator, `contentEntitlements`, Rules and RBAC
+  hierarchy remain unchanged.
+- Source implementation already matches this canonical contract. Phase 10.11M
+  updated documentation only; no deployment or production data change occurred.
+- Current phase: **Phase 10.11M — COMPLETED; checkpoint after documentation
+  reconciliation**.
+- Next checkpoint: rerun the Phase 10.11L deployment-readiness review against
+  the reconciled contract. Deployment is not approved by this documentation
+  update.
+
+## Historical snapshot - Phase 10.11G MEMBERSHIP PRODUCTION READINESS
 
 - Phase 10.10 - News Article Restore / Unarchive: **COMPLETED and CLOSED**.
 - Phase 10.11B - VIP / Entitlement Architecture Discovery & Design:

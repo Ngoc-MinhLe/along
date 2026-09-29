@@ -1,6 +1,6 @@
 # PHASE 10.11D - VIP / ENTITLEMENT ARCHITECTURE FINAL
 
-Status: **ARCHITECTURE FINALIZED - IMPLEMENTATION NOT STARTED**
+Status: **ARCHITECTURE FINALIZED - RECONCILED WITH PHASE 10.11J IMPLEMENTATION**
 
 Date: 2026-09-29
 
@@ -44,15 +44,22 @@ Tier definitions are stored at:
 
 ```js
 {
+  tierId: string, // same value as the membershipTiers document ID
   name: string,
   level: number,
-  active: boolean,
+  status: 'active' | 'inactive',
   description: string | null,
-  sortOrder: number | null,
   createdAt: Timestamp,
-  updatedAt: Timestamp
+  updatedAt: Timestamp,
+  createdBy: string,
+  updatedBy: string
 }
 ```
+
+The canonical stored state uses `status` and does not store a parallel
+`active: boolean` field. Read responses may expose a derived `active` value for
+UI compatibility (`active === status === 'active'`). `sortOrder` is not part of
+the current canonical schema and is not required by the implementation.
 
 `level` is an ordering value. A membership with level `N` can read content
 requiring a level less than or equal to `N`.
@@ -238,15 +245,18 @@ Authenticated users may read active tiers. The response contains only:
 ```js
 {
   id,
+  tierId,
   name,
   level,
+  status,
   description,
   active
 }
 ```
 
 The callable does not permit client writes and does not accept an actor UID or
-permission payload. Tier CRUD is outside this phase.
+permission payload. Tier CRUD is implemented in Phase 10.11J using the same
+canonical schema and trusted callable boundary.
 
 ## 10. Manual membership workflow
 
@@ -349,11 +359,10 @@ Exact edits must be confirmed during implementation. No files outside
 documentation are changed by this architecture-finalization phase.
 
 ```text
-ARCHITECTURE: FINALIZED
-IMPLEMENTATION: NOT STARTED
+ARCHITECTURE: FINALIZED AND RECONCILED
+IMPLEMENTATION: PHASE 10.11J LOCAL FOUNDATION COMPLETED
 PRODUCTION DATA: NO CHANGE
 DEPLOYMENT: NO
 FIRESTORE RULES: NO CHANGE
-COMMIT: NO
-PUSH: NO
+COMMIT/PUSH: IMPLEMENTATION COMMITTED/PUSHED IN PHASE 10.11K; THIS RECONCILIATION IS NOT COMMITTED
 ```

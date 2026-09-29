@@ -4,6 +4,16 @@
 
 **LOCAL IMPLEMENTATION: PASS**
 
+## 1A. Architecture reconciliation
+
+The Phase 10.11J implementation is the canonical tier contract for the
+current project and is now explicitly aligned with Phase 10.11D by Phase
+10.11M. Tier documents use `tierId` equal to the document ID, numeric `level`,
+lower-case `status` (`active` or `inactive`), audit metadata and no stored
+`active` boolean or `sortOrder`. Read responses may expose `active` as a value
+derived from `status`. Membership documents continue to store only `tierId`,
+never a copied tier level.
+
 Phase 10.11J đã được triển khai và kiểm thử trên local/emulator. Chưa deploy Firebase/Vercel, chưa ghi production data, chưa commit và chưa push.
 
 ## 2. Phạm vi đã triển khai

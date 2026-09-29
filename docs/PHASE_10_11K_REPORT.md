@@ -8,6 +8,15 @@
 - Firebase/Vercel deployment: **NO**
 - Production data change: **NO CHANGE**
 
+## Architecture reconciliation follow-up
+
+The implementation committed by this phase follows the canonical Phase
+10.11J tier schema: `tierId` as document ID and field, numeric `level`,
+lower-case `status` (`active`/`inactive`), and no stored `active` boolean or
+`sortOrder`. Phase 10.11M reconciles the earlier Phase 10.11D wording with
+that implementation. This documentation follow-up does not change the
+committed source, deployment state, or production data.
+
 ## Commit
 
 Implementation and Phase 10.11I–J reports were committed as:

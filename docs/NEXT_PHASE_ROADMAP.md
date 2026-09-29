@@ -4,18 +4,43 @@
 >
 > This roadmap contains historical planning records. Phase 10.10 is
 > **COMPLETED/CLOSED** in production; the current documentation checkpoint is
-> Phase 10.11G **PRODUCTION READY - REVIEW ONLY** after the local Membership
-> implementation and readiness review.
+> Phase 10.11M **COMPLETED — DOCUMENTATION-ONLY RECONCILIATION** after the
+> Membership Tier implementation/schema contract was reconciled.
 >
 > **PHASE 10.11 MEMBERSHIP DEPLOYMENT: NOT EXECUTED.** Phase 10.11B-D are
-> architecture checkpoints, Phase 10.11E-F are implemented locally, and
-> Phase 10.11G is ready for an explicitly approved deployment. The items
+> architecture checkpoints, Phase 10.11E-F and 10.11J-K are implemented
+> locally, and Phase 10.11L must be rerun after the Phase 10.11M
+> reconciliation. The items
 > listed later as Phase 10.6, 10.7 and 10.8 are historical/backlog options
 > only and must not be treated as the next implementation phase without
 > explicit approval. Legacy Phase 10.5 current-phase statements later in
 > this file are historical and superseded by Phase 10.10.
 
-## Current authoritative checkpoint - Phase 10.11G
+## Current authoritative checkpoint - Phase 10.11M
+
+- Phase 10.10: **COMPLETED/CLOSED** in production.
+- Phase 10.11B–10.11D: **COMPLETED** as architecture/design checkpoints.
+- Phase 10.11E–10.11F: **COMPLETED locally; not deployed**.
+- Phase 10.11G: **historically BLOCKED** by documentation drift between the
+  architecture contract and the implemented tier schema.
+- Phase 10.11J–10.11K: **LOCAL IMPLEMENTATION PASS; COMMITTED/PUSHED** for
+  Membership Tier Administration; production deployment was not performed.
+- Phase 10.11M: **COMPLETED — DOCUMENTATION-ONLY RECONCILIATION**.
+- Canonical tier schema is `membershipTiers/{tierId}` with `tierId` equal to
+  the document ID, `name`, positive integer `level`, `status: 'active' |
+  'inactive'`, description and audit metadata. No stored `active` boolean or
+  required `sortOrder` is part of the current contract; read responses may
+  derive `active` from `status`.
+- Membership remains `memberships/{membershipId}` with `tierId` and no copied
+  level. Dynamic tiers remain outside System Roles, Custom Roles and
+  `userAuthorizations`.
+- News evaluator, legacy `contentEntitlements`, Firestore Rules, RBAC and
+  production data remain unchanged.
+- Next checkpoint: rerun Phase 10.11L readiness review against the reconciled
+  contract. This roadmap update does not authorize deployment or production
+  data creation.
+
+## Historical checkpoint - Phase 10.11G
 
 - Phase 10.10: **COMPLETED/CLOSED** in production.
 - Phase 10.11B/10.11C/10.11D: **COMPLETED** as architecture/design
