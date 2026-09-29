@@ -6,8 +6,8 @@ function callMembershipFunction(name, payload = {}) {
   return httpsCallable(functions, name)(payload).then((response) => response.data)
 }
 
-export function listMembershipTiers() {
-  return callMembershipFunction('listMembershipTiers', {})
+export function listMembershipTiers({ includeInactive = false } = {}) {
+  return callMembershipFunction('listMembershipTiers', { includeInactive })
 }
 
 export function listMemberships({ limit = 25 } = {}) {
@@ -24,4 +24,16 @@ export function createManualMembership({ userId, tierId, startsAt, expiresAt = n
 
 export function revokeMembership(membershipId) {
   return callMembershipFunction('revokeMembership', { membershipId })
+}
+
+export function createMembershipTier({ tierId, name, level, description = '' }) {
+  return callMembershipFunction('createMembershipTier', { tierId, name, level, description })
+}
+
+export function updateMembershipTier({ tierId, name, level, description = '' }) {
+  return callMembershipFunction('updateMembershipTier', { tierId, name, level, description })
+}
+
+export function deactivateMembershipTier(tierId) {
+  return callMembershipFunction('deactivateMembershipTier', { tierId })
 }

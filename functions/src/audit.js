@@ -30,6 +30,9 @@ const AUDIT_ACTIONS = Object.freeze({
   AUTHORIZATION_REBUILT: 'AUTHORIZATION_REBUILT',
   MEMBERSHIP_CREATED: 'MEMBERSHIP_CREATED',
   MEMBERSHIP_REVOKED: 'MEMBERSHIP_REVOKED',
+  MEMBERSHIP_TIER_CREATED: 'MEMBERSHIP_TIER_CREATED',
+  MEMBERSHIP_TIER_UPDATED: 'MEMBERSHIP_TIER_UPDATED',
+  MEMBERSHIP_TIER_DEACTIVATED: 'MEMBERSHIP_TIER_DEACTIVATED',
 })
 
 const OPERATION_ACTIONS = Object.freeze({
@@ -57,6 +60,9 @@ const OPERATION_ACTIONS = Object.freeze({
   rebuildProtectedSystemRoleAuthorizations: AUDIT_ACTIONS.AUTHORIZATION_REBUILT,
   createManualMembership: AUDIT_ACTIONS.MEMBERSHIP_CREATED,
   revokeMembership: AUDIT_ACTIONS.MEMBERSHIP_REVOKED,
+  createMembershipTier: AUDIT_ACTIONS.MEMBERSHIP_TIER_CREATED,
+  updateMembershipTier: AUDIT_ACTIONS.MEMBERSHIP_TIER_UPDATED,
+  deactivateMembershipTier: AUDIT_ACTIONS.MEMBERSHIP_TIER_DEACTIVATED,
 })
 
 const DENIED_ERROR_CODES = new Set([
@@ -83,11 +89,12 @@ function operationContext(operation, data = {}, result = {}) {
   const articleId = safeId(data.articleId) || safeId(result.articleId)
   const categoryId = safeId(data.categoryId) || safeId(result.categoryId)
   const membershipId = safeId(data.membershipId) || safeId(result.membershipId)
+  const tierId = safeId(data.tierId) || safeId(result.tierId)
   const resourceId = safeId(data.resourceId) || safeId(result.resourceId)
   const resourceType = operation.includes('News') ? 'NEWS'
     : operation.includes('CustomRole') ? 'CUSTOM_ROLE'
       : operation.includes('Membership') ? 'MEMBERSHIP' : 'USER'
-  const resourceIdValue = membershipId || roleId || articleId || categoryId || resourceId || targetUid
+  const resourceIdValue = membershipId || tierId || roleId || articleId || categoryId || resourceId || targetUid
   const metadata = {}
 
   if (operation === 'setSystemRole' && safeId(data.targetSystemRole)) metadata.targetSystemRole = data.targetSystemRole

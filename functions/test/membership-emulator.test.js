@@ -93,9 +93,9 @@ async function main() {
     createAccount('membership-user', 'USER'),
     createAccount('membership-target', 'USER'),
   ])
-  await db.doc('membershipTiers/vip1').set({ name: 'VIP 1', level: 1, active: true, description: 'Tier 1' })
-  await db.doc('membershipTiers/vip10').set({ name: 'VIP 10', level: 10, active: true, description: 'Tier 10' })
-  await db.doc('membershipTiers/disabled').set({ name: 'Disabled', level: 2, active: false })
+  await db.doc('membershipTiers/vip1').set({ tierId: 'vip1', name: 'VIP 1', level: 1, status: 'active', description: 'Tier 1' })
+  await db.doc('membershipTiers/vip10').set({ tierId: 'vip10', name: 'VIP 10', level: 10, status: 'active', description: 'Tier 10' })
+  await db.doc('membershipTiers/disabled').set({ tierId: 'disabled', name: 'Disabled', level: 2, status: 'inactive' })
 
   const [rootToken, superToken, adminToken, editorToken, userToken] = await Promise.all([
     signIn('membership-root'), signIn('membership-super'), signIn('membership-admin'),

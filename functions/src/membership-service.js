@@ -10,7 +10,10 @@ const { invokeAudited } = require('./audit')
 
 const MEMBERSHIP_STATUSES = Object.freeze({ ACTIVE: 'ACTIVE', EXPIRED: 'EXPIRED', REVOKED: 'REVOKED' })
 const MEMBERSHIP_SOURCES = Object.freeze({ MANUAL: 'MANUAL', PAYMENT: 'PAYMENT' })
+const TIER_STATUSES = Object.freeze({ ACTIVE: 'active', INACTIVE: 'inactive' })
 const MAX_ID_LENGTH = 128
+const MAX_TIER_NAME_LENGTH = 160
+const MAX_TIER_DESCRIPTION_LENGTH = 2000
 const DEFAULT_LIST_LIMIT = 25
 const MAX_LIST_LIMIT = 100
 
@@ -46,6 +49,46 @@ function normalizeId(value, fieldName) {
     invalidArgument(`${fieldName} must be a non-empty string.`)
   }
   return value.trim()
+}
+
+function normalizeTierId(value) {
+  const tierId = normalizeId(value, 'tierId')
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(tierId)) {
+    invalidArgument('tierId must contain only letters, numbers, hyphens, or underscores.')
+  }
+  return tierId
+}
+
+function normalizeTierFields(data) {
+  if (typeof data?.name !== 'string' || !data.name.trim() || data.name.trim().length > MAX_TIER_NAME_LENGTH) {
+    invalidArgument(`name must be a non-empty string up to ${MAX_TIER_NAME_LENGTH} characters.`)
+  }
+  if (!Number.isSafeInteger(data?.level) || data.level < 1) {
+    invalidArgument('level must be a positive integer.')
+  }
+  if (data?.description !== undefined && typeof data.description !== 'string') {
+    invalidArgument('description must be a string.')
+  }
+  const description = typeof data?.description === 'string' ? data.description.trim() : ''
+  if (description.length > MAX_TIER_DESCRIPTION_LENGTH) {
+    invalidArgument(`description must be no longer than ${MAX_TIER_DESCRIPTION_LENGTH} characters.`)
+  }
+  return { name: data.name.trim(), level: data.level, description }
+}
+
+function normalizeTierCreatePayload(data) {
+  assertAllowedKeys(data || {}, ['tierId', 'name', 'level', 'description'])
+  return { tierId: normalizeTierId(data?.tierId), ...normalizeTierFields(data) }
+}
+
+function normalizeTierUpdatePayload(data) {
+  assertAllowedKeys(data || {}, ['tierId', 'name', 'level', 'description'])
+  return { tierId: normalizeTierId(data?.tierId), ...normalizeTierFields(data) }
+}
+
+function normalizeTierDeactivatePayload(data) {
+  assertAllowedKeys(data || {}, ['tierId'])
+  return { tierId: normalizeTierId(data?.tierId) }
 }
 
 function timestampMillis(value) {
@@ -97,17 +140,22 @@ function normalizeListPayload(data, { requireUserId = false } = {}) {
 
 function normalizeTier(tierId, data) {
   if (!data || typeof data !== 'object'
+    || data.tierId !== tierId
     || typeof data.name !== 'string'
+    || !data.name.trim()
     || !Number.isSafeInteger(data.level)
     || data.level < 1
-    || data.active !== true) {
+    || !Object.values(TIER_STATUSES).includes(data.status)
+    || (data.active !== undefined && data.active !== (data.status === TIER_STATUSES.ACTIVE))) {
     return null
   }
   return {
     id: tierId,
-    name: data.name,
+    tierId,
+    name: data.name.trim(),
     level: data.level,
-    active: true,
+    status: data.status,
+    active: data.status === TIER_STATUSES.ACTIVE,
     description: typeof data.description === 'string' ? data.description : null,
   }
 }
@@ -247,14 +295,108 @@ function requireMembershipManager(actor, permission) {
 }
 
 async function listMembershipTiers(actor, data, db = adminDb) {
-  assertAllowedKeys(data || {}, [])
-  const snapshot = await db.collection('membershipTiers').where('active', '==', true).get()
+  assertAllowedKeys(data || {}, ['includeInactive'])
+  if (data?.includeInactive !== undefined && typeof data.includeInactive !== 'boolean') {
+    invalidArgument('includeInactive must be a boolean.')
+  }
+  const includeInactive = data?.includeInactive === true
+  if (includeInactive) requireMembershipManager(actor, 'membership.read')
+  const snapshot = await db.collection('membershipTiers').get()
   const items = snapshot.docs
     .map((item) => normalizeTier(item.id, item.data()))
     .filter(Boolean)
+    .filter((item) => includeInactive || item.status === TIER_STATUSES.ACTIVE)
     .sort((left, right) => left.level - right.level || left.id.localeCompare(right.id))
-    .map(({ id, name, level, description, active }) => ({ id, name, level, description, active }))
+    .map(({ id, tierId, name, level, status, active, description }) => ({ id, tierId, name, level, status, active, description }))
   return { ok: true, items }
+}
+
+async function createMembershipTier(actor, data, db = adminDb) {
+  const payload = normalizeTierCreatePayload(data)
+  requireMembershipManager(actor, 'membership.update')
+  const ref = db.doc(`membershipTiers/${payload.tierId}`)
+  const now = Timestamp.now()
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref)
+    if (snapshot.exists) alreadyExists('The Membership tier already exists.')
+    transaction.create(ref, {
+      tierId: payload.tierId,
+      name: payload.name,
+      level: payload.level,
+      status: TIER_STATUSES.ACTIVE,
+      description: payload.description,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: actor.uid,
+      updatedBy: actor.uid,
+    })
+  })
+  return {
+    ok: true,
+    operation: 'createMembershipTier',
+    tierId: payload.tierId,
+    name: payload.name,
+    level: payload.level,
+    status: TIER_STATUSES.ACTIVE,
+  }
+}
+
+async function updateMembershipTier(actor, data, db = adminDb) {
+  const payload = normalizeTierUpdatePayload(data)
+  requireMembershipManager(actor, 'membership.update')
+  const ref = db.doc(`membershipTiers/${payload.tierId}`)
+  const result = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) notFound('The Membership tier was not found.')
+    const tier = normalizeTier(payload.tierId, snapshot.data())
+    if (!tier) failedPrecondition('The Membership tier is invalid.')
+    const now = Timestamp.now()
+    transaction.update(ref, {
+      name: payload.name,
+      level: payload.level,
+      description: payload.description,
+      updatedAt: now,
+      updatedBy: actor.uid,
+    })
+    return { status: tier.status }
+  })
+  return {
+    ok: true,
+    operation: 'updateMembershipTier',
+    tierId: payload.tierId,
+    name: payload.name,
+    level: payload.level,
+    status: result.status,
+  }
+}
+
+async function deactivateMembershipTier(actor, data, db = adminDb) {
+  const payload = normalizeTierDeactivatePayload(data)
+  requireMembershipManager(actor, 'membership.update')
+  const ref = db.doc(`membershipTiers/${payload.tierId}`)
+  const result = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref)
+    if (!snapshot.exists) notFound('The Membership tier was not found.')
+    const tier = normalizeTier(payload.tierId, snapshot.data())
+    if (!tier) failedPrecondition('The Membership tier is invalid.')
+    if (tier.status === TIER_STATUSES.INACTIVE) {
+      return { status: TIER_STATUSES.INACTIVE, changed: false }
+    }
+    const now = Timestamp.now()
+    transaction.update(ref, {
+      status: TIER_STATUSES.INACTIVE,
+      updatedAt: now,
+      updatedBy: actor.uid,
+    })
+    return { status: TIER_STATUSES.INACTIVE, changed: true }
+  })
+  return {
+    ok: true,
+    operation: 'deactivateMembershipTier',
+    tierId: payload.tierId,
+    status: result.status,
+    changed: result.changed,
+  }
 }
 
 async function listMemberships(actor, data, db = adminDb) {
@@ -299,7 +441,7 @@ async function createManualMembership(actor, data, db = adminDb) {
       failedPrecondition('The target user profile is invalid or inactive.')
     }
     const tier = tierSnapshot.exists ? normalizeTier(payload.tierId, tierSnapshot.data()) : null
-    if (!tier) failedPrecondition('The membership tier was not found or is inactive.')
+    if (!tier || tier.status !== TIER_STATUSES.ACTIVE) failedPrecondition('The membership tier was not found or is inactive.')
     const active = membershipSnapshot.docs
       .map((item) => normalizeMembership(item.id, item.data()))
       .find((item) => item?.status === MEMBERSHIP_STATUSES.ACTIVE)
@@ -364,7 +506,11 @@ async function invokeMembershipMutation(request, handler, operation) {
 module.exports = {
   MEMBERSHIP_STATUSES,
   MEMBERSHIP_SOURCES,
+  TIER_STATUSES,
   normalizeTier,
+  normalizeTierCreatePayload,
+  normalizeTierUpdatePayload,
+  normalizeTierDeactivatePayload,
   normalizeMembership,
   normalizeCreatePayload,
   normalizeRevokePayload,
@@ -373,6 +519,9 @@ module.exports = {
   getActiveMembership,
   resolveEffectiveMembership,
   listMembershipTiers,
+  createMembershipTier,
+  updateMembershipTier,
+  deactivateMembershipTier,
   listMemberships,
   getUserMemberships,
   createManualMembership,

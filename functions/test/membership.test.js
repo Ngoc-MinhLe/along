@@ -3,6 +3,9 @@ const { Timestamp } = require('firebase-admin/firestore')
 const { HttpsError } = require('firebase-functions/v2/https')
 const {
   normalizeTier,
+  normalizeTierCreatePayload,
+  normalizeTierUpdatePayload,
+  normalizeTierDeactivatePayload,
   normalizeMembership,
   normalizeCreatePayload,
   normalizeRevokePayload,
@@ -18,12 +21,26 @@ const now = Timestamp.now()
 const later = Timestamp.fromMillis(now.toMillis() + 60_000)
 
 assert.deepEqual(normalizeTier('vip10', {
-  name: 'VIP 10', level: 10, active: true, description: 'High tier',
+  tierId: 'vip10', name: 'VIP 10', level: 10, status: 'active', description: 'High tier',
 }), {
-  id: 'vip10', name: 'VIP 10', level: 10, active: true, description: 'High tier',
+  id: 'vip10', tierId: 'vip10', name: 'VIP 10', level: 10, status: 'active', active: true, description: 'High tier',
 })
-assert.equal(normalizeTier('vip0', { name: 'VIP 0', level: 0, active: true }), null)
-assert.equal(normalizeTier('disabled', { name: 'Disabled', level: 1, active: false }), null)
+assert.equal(normalizeTier('vip0', { tierId: 'vip0', name: 'VIP 0', level: 0, status: 'active' }), null)
+assert.equal(normalizeTier('disabled', { tierId: 'disabled', name: 'Disabled', level: 1, status: 'inactive' }).active, false)
+assert.equal(normalizeTier('mismatch', { tierId: 'other', name: 'Mismatch', level: 1, status: 'active' }), null)
+assert.equal(normalizeTier('bad-status', { tierId: 'bad-status', name: 'Bad', level: 1, status: 'paused' }), null)
+assert.equal(normalizeTier('bad-active', { tierId: 'bad-active', name: 'Bad', level: 1, status: 'active', active: false }), null)
+
+assert.deepEqual(normalizeTierCreatePayload({ tierId: 'gold', name: 'Gold', level: 10, description: 'Paid tier' }), {
+  tierId: 'gold', name: 'Gold', level: 10, description: 'Paid tier',
+})
+assert.deepEqual(normalizeTierUpdatePayload({ tierId: 'gold', name: 'Gold Plus', level: 11 }), {
+  tierId: 'gold', name: 'Gold Plus', level: 11, description: '',
+})
+assert.deepEqual(normalizeTierDeactivatePayload({ tierId: 'gold' }), { tierId: 'gold' })
+throwsCode(() => normalizeTierCreatePayload({ tierId: 'VIP 1', name: 'VIP', level: 1 }), 'invalid-argument')
+throwsCode(() => normalizeTierCreatePayload({ tierId: 'vip', name: 'VIP', level: 0 }), 'invalid-argument')
+throwsCode(() => normalizeTierCreatePayload({ tierId: 'vip', name: 'VIP', level: 1, status: 'active' }), 'invalid-argument')
 
 const payload = normalizeCreatePayload({
   userId: 'target-user', tierId: 'vip10', startsAt: now, expiresAt: later,

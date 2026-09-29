@@ -192,3 +192,13 @@
 .membership-history-row { display: flex; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid #edf2ef; color: #57746c; font-size: 11px; }
 .membership-history-row span { color: #829690; text-align: right; }
 @media (max-width: 620px) { .membership-form-grid { grid-template-columns: 1fr; } .membership-history-row { display: grid; gap: 5px; } .membership-history-row span { text-align: left; } }
+.admin-membership-tiers-page { display: grid; gap: 18px; }
+.membership-tier-form textarea { width: 100%; resize: vertical; padding: 9px 10px; border: 1px solid #cadbd4; border-radius: 7px; color: #315a52; background: #fff; font: inherit; font-size: 12px; }
+.membership-tier-table-scroll { overflow-x: auto; }
+.membership-tier-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 11px; }
+.membership-tier-table th, .membership-tier-table td { padding: 11px 9px; border-bottom: 1px solid #edf2ef; text-align: left; vertical-align: top; }
+.membership-tier-table th { color: #829690; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.membership-tier-table td strong, .membership-tier-table td code { color: #315a52; }
+.membership-tier-table td code { font-size: 10px; }
+.membership-status.active { color: #287b5a; background: #e7f5eb; }
+.membership-status.inactive { color: #87651f; background: #fff8e8; }

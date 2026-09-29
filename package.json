@@ -30,6 +30,7 @@
     "test:functions:news:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-news-audit \"node functions/test/news-emulator.test.js\"",
     "test:functions:user:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-user-audit \"node functions/test/user-emulator.test.js\"",
     "test:functions:membership:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-membership-audit \"node functions/test/membership-emulator.test.js\"",
+    "test:functions:membership-tier:emulator": "firebase emulators:exec --only functions,firestore,auth --project along-membership-tier-audit \"node functions/test/membership-tier-emulator.test.js\"",
     "test:frontend-rbac": "node scripts/frontend-rbac-functions-test.mjs",
     "test:frontend-membership": "node scripts/membership-frontend-test.mjs",
     "test:frontend-news": "node scripts/news-frontend-test.mjs",

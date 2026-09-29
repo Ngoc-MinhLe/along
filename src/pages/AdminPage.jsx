@@ -8,6 +8,7 @@ export default function AdminPage() {
   const canReadUsers = hasPermission(PERMISSIONS.USERS_READ)
   const canReadRoles = hasPermission(PERMISSIONS.ROLES_READ)
   const canReadMemberships = hasPermission(PERMISSIONS.MEMBERSHIP_READ)
+  const canManageMembershipTiers = hasPermission(PERMISSIONS.MEMBERSHIP_UPDATE)
 
   return (
     <section className="admin-dashboard">
@@ -17,6 +18,7 @@ export default function AdminPage() {
         {canReadRoles && <Link className="admin-card" to="/admin/roles"><strong>Vai trò</strong><span>Phân biệt System Role và Custom Role.</span></Link>}
         {canReadRoles && <Link className="admin-card" to="/admin/permissions"><strong>Permission Catalog</strong><span>{Object.keys(PERMISSIONS).length} capability được định nghĩa.</span></Link>}
         {canReadMemberships && <Link className="admin-card" to="/admin/memberships"><strong>Membership</strong><span>Quản lý tier động và lịch sử Membership theo policy.</span></Link>}
+        {canManageMembershipTiers && <Link className="admin-card" to="/admin/membership-tiers"><strong>Membership tiers</strong><span>Tạo, cập nhật và vô hiệu hóa tier bằng trusted backend.</span></Link>}
       </div>
       <div className="admin-card admin-role-list"><h3>System Roles</h3><div>{Object.values(SYSTEM_ROLES).map((role) => <span key={role}>{role}</span>)}</div></div>
     </section>

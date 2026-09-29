@@ -9,6 +9,7 @@ export default function AdminLayout() {
   const canReadUsers = hasPermission(PERMISSIONS.USERS_READ)
   const canReadRoles = hasPermission(PERMISSIONS.ROLES_READ)
   const canReadMemberships = hasPermission(PERMISSIONS.MEMBERSHIP_READ)
+  const canManageMembershipTiers = hasPermission(PERMISSIONS.MEMBERSHIP_UPDATE)
   const canManageNews = hasAnyPermission([PERMISSIONS.NEWS_CREATE, PERMISSIONS.NEWS_UPDATE, PERMISSIONS.NEWS_DELETE, PERMISSIONS.NEWS_PUBLISH])
   const canOpenAdmin = hasAnyPermission([
     PERMISSIONS.USERS_READ,
@@ -39,6 +40,7 @@ export default function AdminLayout() {
         {canReadRoles && <Link to="/admin/permissions">Danh mục quyền</Link>}
         {canManageNews && <Link to="/admin/news">Tin tức</Link>}
         {canReadMemberships && <Link to="/admin/memberships">Membership</Link>}
+        {canManageMembershipTiers && <Link to="/admin/membership-tiers">Quản lý tier</Link>}
       </nav>
       <Outlet />
     </div>
