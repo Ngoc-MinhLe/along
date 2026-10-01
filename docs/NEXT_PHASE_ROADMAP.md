@@ -1252,3 +1252,23 @@ Detailed report: `docs/PHASE_10_10C_REPORT.md`.
 - Next checkpoint: production-readiness review for the Membership-aware News
   evaluator and an explicit deployment decision. Do not create production
   tiers/memberships or change News data before that decision.
+
+## Current authoritative checkpoint - Phase 10.12
+
+- Phase 10.12 - Admin Scalability & Large-Data UX: **IMPLEMENTED LOCALLY;
+  TESTED; NOT DEPLOYED**.
+- Scope completed locally: bounded trusted User reads, cursor pagination for
+  Users/Membership/Custom Role/News/Calendar administration, debounced async
+  selectors, News management search/filter support, and removal of the
+  unbounded Calendar client fallback.
+- Composite index definitions for the new query shapes were updated locally;
+  index deployment is still pending a separate review.
+- No Firestore Rules, RBAC/policy, authorization materialization, Membership
+  schema, News evaluator, production data, deployment, commit or push changed
+  in this phase.
+- Required regression, emulator, Rules, frontend, build and scalability tests
+  passed. The remaining limitations are browser E2E coverage, a dedicated
+  Custom Role assignment aggregate, and fully async category/tier selectors.
+- Next proposed checkpoint: review deployment scope for the affected read
+  callables and indexes, then controlled browser verification. No production
+  deployment is authorized by this entry.

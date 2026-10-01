@@ -8,6 +8,7 @@ const membershipFunctions = require('./membership-functions')
 
 exports.authHealth = authHealth
 exports.createCustomRole = customRoleFunctions.createCustomRole
+exports.listCustomRoles = customRoleFunctions.listCustomRoles
 exports.updateCustomRole = customRoleFunctions.updateCustomRole
 exports.disableCustomRole = customRoleFunctions.disableCustomRole
 exports.enableCustomRole = customRoleFunctions.enableCustomRole
@@ -16,6 +17,7 @@ exports.assignCustomRole = customRoleFunctions.assignCustomRole
 exports.revokeCustomRole = customRoleFunctions.revokeCustomRole
 exports.setSystemRole = systemRoleFunctions.setSystemRole
 exports.updateUserProfile = userFunctions.updateUserProfile
+exports.listUsers = userFunctions.listUsers
 exports.rebuildProtectedSystemRoleAuthorizations = authorizationRebuildFunctions.rebuildProtectedSystemRoleAuthorizations
 exports.listMembershipTiers = membershipFunctions.listMembershipTiers
 exports.listMemberships = membershipFunctions.listMemberships

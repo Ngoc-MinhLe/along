@@ -23,9 +23,17 @@ export function requireFirestore() {
   return db
 }
 
-export async function listCalendarImports() {
-  const snapshot = await getDocs(query(collection(requireFirestore(), IMPORTS), orderBy('createdAt', 'desc')))
-  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
+export async function listCalendarImports({ cursor = null, pageSize = 25 } = {}) {
+  const safePageSize = Math.min(Math.max(Number(pageSize) || 25, 1), 50)
+  const constraints = [orderBy('createdAt', 'desc'), limit(safePageSize + 1)]
+  if (cursor) constraints.splice(1, 0, startAfter(cursor))
+  const snapshot = await getDocs(query(collection(requireFirestore(), IMPORTS), ...constraints))
+  const documents = snapshot.docs.slice(0, safePageSize)
+  return {
+    items: documents.map((item) => ({ id: item.id, ...item.data() })),
+    cursor: documents.at(-1) || null,
+    hasMore: snapshot.docs.length > safePageSize,
+  }
 }
 
 export async function importCalendarRows(parsed, onProgress) {
@@ -126,44 +134,8 @@ function makeCalendarQuery(importId, filters, cursor, pageSize) {
   return query(entries, ...constraints)
 }
 
-function makeFallbackQuery(importId, filters, cursor, pageSize) {
-  const entries = collection(requireFirestore(), IMPORTS, importId, 'entries')
-  const constraints = []
-  const hasRange = Boolean(filters.__rangeKey && (filters.__rangeStart !== '' || filters.__rangeEnd !== ''))
-  if (hasRange) {
-    if (filters.__rangeStart !== '') constraints.push(where(`range.${filters.__rangeKey}`, '>=', filters.__rangeStart))
-    if (filters.__rangeEnd !== '') constraints.push(where(`range.${filters.__rangeKey}`, '<=', filters.__rangeEnd))
-    constraints.push(orderBy(`range.${filters.__rangeKey}`, 'asc'))
-  } else {
-    constraints.push(orderBy('__name__'))
-  }
-  constraints.push(limit(pageSize))
-  if (cursor) constraints.push(startAfter(cursor))
-  return query(entries, ...constraints)
-}
-
-function applyClientFilters(rows, filters) {
-  return rows.filter((row) => Object.entries(filters).every(([key, value]) => {
-    if (key.startsWith('__') || value === '' || value === undefined || value === null) return true
-    return String(row.search?.[key]) === String(value)
-  }))
-}
-
 function isMissingCompositeIndex(error) {
   return error?.code === 'failed-precondition' && /index/i.test(error.message || '')
-}
-
-async function searchWithoutCompositeIndex({ importId, filters, pageSize }) {
-  const rows = []
-  let cursor = null
-  let hasMore = true
-  while (hasMore) {
-    const snapshot = await getDocs(makeFallbackQuery(importId, filters, cursor, pageSize))
-    rows.push(...snapshot.docs.map((item) => ({ id: item.id, ...item.data() })))
-    hasMore = snapshot.size === pageSize
-    cursor = snapshot.docs.at(-1) || null
-  }
-  return { rows: applyClientFilters(rows, filters), cursor: null, hasMore: false }
 }
 
 export async function searchCalendarEntries({ importId, filters = {}, cursor = null, pageSize = 25 }) {
@@ -176,6 +148,6 @@ export async function searchCalendarEntries({ importId, filters = {}, cursor = n
     }
   } catch (error) {
     if (!isMissingCompositeIndex(error)) throw error
-    return searchWithoutCompositeIndex({ importId, filters, pageSize: Math.max(pageSize, 200) })
+    throw new Error('Calendar search requires the matching Firestore index. No unbounded client-side fallback is used.')
   }
 }

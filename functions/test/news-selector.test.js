@@ -16,9 +16,11 @@ function snapshot(id, data) {
 
 function queryFrom(docs) {
   const query = {
+    where() { return query },
     orderBy() { return query },
     startAt() { return query },
     endAt() { return query },
+    startAfter() { return query },
     limit() { return query },
     async get() { return { docs } },
   }

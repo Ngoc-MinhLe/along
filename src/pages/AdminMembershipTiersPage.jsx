@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '../auth/PermissionContext'
 import { PERMISSIONS } from '../services/rbac/permissions'
+import CursorPagination from '../components/CursorPagination'
 import {
   createMembershipTier,
   deactivateMembershipTier,
@@ -61,18 +62,26 @@ export default function AdminMembershipTiersPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [tierCursor, setTierCursor] = useState(null)
+  const [tierPageCursors, setTierPageCursors] = useState([null])
+  const [tierPage, setTierPage] = useState(1)
+  const [tierHasMore, setTierHasMore] = useState(false)
 
   const generatedTierId = useMemo(
     () => generateMembershipTierId(form.name, tiers.filter((tier) => (tier.id || tier.tierId) !== editingTierId)),
     [form.name, tiers, editingTierId],
   )
 
-  async function loadTiers() {
+  async function loadTiers(cursor = null, page = 1) {
     setLoading(true)
     setError('')
     try {
-      const result = await listMembershipTiers({ includeInactive: true })
+      const result = await listMembershipTiers({ includeInactive: true, limit: 25, cursor })
       setTiers(result.items || [])
+      setTierCursor(result.nextCursor || null)
+      setTierHasMore(Boolean(result.hasMore))
+      setTierPage(page)
+      setTierPageCursors((current) => { const next = current.slice(0, page); next[page] = result.nextCursor || null; return next })
     } catch (loadError) {
       setError(loadError.message || 'Không thể tải danh sách Membership.')
     } finally {
@@ -170,6 +179,7 @@ export default function AdminMembershipTiersPage() {
     <div className="admin-card membership-tier-list-card">
       <div className="admin-section-heading"><div><h3>Danh sách Membership</h3><p>Membership đã vô hiệu hóa vẫn được giữ để bảo toàn lịch sử cấp quyền.</p></div></div>
       {loading ? <p className="admin-muted">Đang tải Membership…</p> : !tiers.length ? <p className="admin-muted">Chưa có Membership. Hãy tạo Membership đầu tiên.</p> : <div className="membership-tier-table-scroll"><table className="membership-tier-table"><thead><tr><th>Mã kỹ thuật</th><th>Tên Membership</th><th>Cấp độ</th><th>Trạng thái</th><th>Mô tả</th><th>Thao tác</th></tr></thead><tbody>{tiers.map((tier) => <tr key={tier.id || tier.tierId}><td><code>{tier.id || tier.tierId}</code></td><td><strong>{tier.name}</strong></td><td>{tier.level}</td><td><span className={`membership-status ${tier.status}`}>{statusLabel(tier.status)}</span></td><td>{tier.description || '—'}</td><td><div className="admin-row-actions"><button type="button" className="admin-secondary-button" onClick={() => beginEdit(tier)} disabled={busy}>Sửa</button>{tier.status === 'active' && <button type="button" className="admin-danger-button" onClick={() => handleDeactivate(tier)} disabled={busy}>Vô hiệu hóa</button>}</div></td></tr>)}</tbody></table></div>}
+      <CursorPagination page={tierPage} hasMore={tierHasMore} loading={loading || busy} rangeLabel={`Trang Membership Tier ${tierPage}`} onPrevious={() => loadTiers(tierPageCursors[Math.max(0, tierPage - 2)] || null, tierPage - 1)} onNext={() => loadTiers(tierCursor, tierPage + 1)} />
     </div>
   </section>
 }

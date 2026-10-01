@@ -1,21 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { usePermissions } from '../auth/PermissionContext'
 import { getPermissionMetadata, PERMISSION_GROUP_LABELS, PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
 import { canManageUserRole, getDelegationScope, getEffectivePermissions, getRoleDelegationPreview, getSystemRole, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { getSystemRoleMetadata, ROLE_HIERARCHY, SYSTEM_ROLES } from '../services/rbac/roles'
-import { listCustomRoles, listUsers } from '../services/rbac/firestore'
+import { listCustomRoles, listUsersPage } from '../services/rbac/firestore'
+import AsyncSearchSelect from '../components/AsyncSearchSelect'
+import CursorPagination from '../components/CursorPagination'
 import { assignCustomRole, rebuildProtectedSystemRoleAuthorizations, revokeCustomRole, setSystemRole, updateUserProfile } from '../services/rbac/functions'
 
 const PAGE_SIZE = 25
 const STATUS_OPTIONS = ['active', 'suspended', 'deletion_requested', 'deleted']
-const SORT_OPTIONS = [
-    ['name', 'Tên'],
-    ['email', 'Email'],
-    ['createdAt', 'Ngày tạo'],
-    ['lastLoginAt', 'Lần đăng nhập gần nhất'],
-    ['systemRole', 'Vai trò nền tảng'],
-]
 const ASSIGNABLE_SYSTEM_ROLES = Object.freeze(ROLE_HIERARCHY.filter((role) => role !== SYSTEM_ROLES.ROOT_ADMIN))
 
 function formatDate(value) {
@@ -59,14 +54,17 @@ export default function AdminUsersPage() {
   const [roles, setRoles] = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [roleToAssign, setRoleToAssign] = useState('')
+  const [selectedRoleOption, setSelectedRoleOption] = useState(null)
   const [systemRoleToSet, setSystemRoleToSet] = useState('')
   const [search, setSearch] = useState('')
   const [systemRoleFilter, setSystemRoleFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [customRoleFilter, setCustomRoleFilter] = useState('')
-  const [sortBy, setSortBy] = useState('name')
-  const [sortDirection, setSortDirection] = useState('asc')
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState(null)
   const [page, setPage] = useState(1)
+  const [nextCursor, setNextCursor] = useState(null)
+  const [pageCursors, setPageCursors] = useState([null])
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -74,13 +72,35 @@ export default function AdminUsersPage() {
   const [revokeTarget, setRevokeTarget] = useState(null)
   const [profileDraft, setProfileDraft] = useState({ displayName: '', photoURL: '' })
 
-  async function loadData() {
+  async function loadRoles() {
+    const nextRoles = await listCustomRoles({ pageSize: 50 })
+    setRoles(nextRoles)
+  }
+
+  const searchCustomRoles = useCallback((query) => listCustomRoles({ query, pageSize: 20, status: 'active' }), [])
+
+  async function loadUsersPage(cursor = null, targetPage = 1) {
     setLoading(true)
     setError('')
     try {
-      const [nextUsers, nextRoles] = await Promise.all([listUsers(), listCustomRoles()])
+      const result = await listUsersPage({
+        query: search.trim(),
+        status: statusFilter,
+        systemRole: systemRoleFilter,
+        customRoleId: customRoleFilter,
+        pageSize: PAGE_SIZE,
+        ...(cursor ? { cursor } : {}),
+      })
+      const nextUsers = result.items || []
       setUsers(nextUsers)
-      setRoles(nextRoles)
+      setHasMore(Boolean(result.hasMore))
+      setNextCursor(result.nextCursor || null)
+      setPage(targetPage)
+      setPageCursors((current) => {
+        const next = current.slice(0, targetPage)
+        next[targetPage] = result.nextCursor || null
+        return next
+      })
       setSelectedId((current) => nextUsers.some((item) => item.id === current) ? current : '')
     } catch (loadError) {
       setError(loadError.message)
@@ -89,30 +109,20 @@ export default function AdminUsersPage() {
     }
   }
 
-  useEffect(() => { loadData() }, [])
+  async function loadData() {
+    await Promise.all([loadUsersPage(null, 1), loadRoles()])
+    setPageCursors([null])
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => { loadData().catch(() => {}) }, search.trim() ? 300 : 0)
+    return () => clearTimeout(timer)
+  }, [search, systemRoleFilter, statusFilter, customRoleFilter])
 
   const roleMap = useMemo(() => Object.fromEntries(roles.map((role) => [role.id, role])), [roles])
-  const filteredUsers = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return users.filter((item) => {
-      const searchable = [item.displayName, item.email, item.uid, item.id].filter(Boolean).join(' ').toLowerCase()
-      const matchesSearch = !query || searchable.includes(query)
-      const matchesSystemRole = !systemRoleFilter || getSystemRole(item) === systemRoleFilter
-      const matchesStatus = !statusFilter || (item.status || 'active') === statusFilter
-      const matchesCustomRole = !customRoleFilter || (item.customRoles || []).includes(customRoleFilter)
-      return matchesSearch && matchesSystemRole && matchesStatus && matchesCustomRole
-    }).sort((left, right) => {
-      let comparison = 0
-      if (sortBy === 'name') comparison = (left.displayName || '').localeCompare(right.displayName || '', 'vi')
-      else if (sortBy === 'email') comparison = (left.email || '').localeCompare(right.email || '')
-      else if (sortBy === 'systemRole') comparison = ROLE_HIERARCHY.indexOf(getSystemRole(left)) - ROLE_HIERARCHY.indexOf(getSystemRole(right))
-      else comparison = dateValue(left[sortBy]) - dateValue(right[sortBy])
-      return sortDirection === 'asc' ? comparison : -comparison
-    })
-  }, [users, search, systemRoleFilter, statusFilter, customRoleFilter, sortBy, sortDirection])
-
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE))
-  const pageUsers = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const filteredUsers = users
+  const totalPages = hasMore ? page + 1 : page
+  const pageUsers = users
   const selected = users.find((item) => item.id === selectedId) || null
   const activeRoles = roles.filter((role) => role.status === 'active')
   const selectedAssignedRoles = selected?.customRoles || []
@@ -122,12 +132,15 @@ export default function AdminUsersPage() {
   function updateFilter(setter, value) {
     setter(value)
     setPage(1)
+    setPageCursors([null])
+    setNextCursor(null)
   }
 
   function selectUser(id) {
     const nextUser = users.find((item) => item.id === id)
     setSelectedId(id)
     setRoleToAssign('')
+    setSelectedRoleOption(null)
     setSystemRoleToSet('')
     setProfileDraft({ displayName: nextUser?.displayName || '', photoURL: nextUser?.photoURL || '' })
     setError('')
@@ -256,9 +269,8 @@ export default function AdminUsersPage() {
         <input value={search} onChange={(event) => updateFilter(setSearch, event.target.value)} placeholder="Tìm kiếm người dùng..." aria-label="Tìm kiếm người dùng" />
         <select value={systemRoleFilter} onChange={(event) => updateFilter(setSystemRoleFilter, event.target.value)} aria-label="Lọc System Role"><option value="">System Role: Tất cả</option>{[...ROLE_HIERARCHY].reverse().map((role) => <option key={role} value={role}>{role}</option>)}</select>
         <select value={statusFilter} onChange={(event) => updateFilter(setStatusFilter, event.target.value)} aria-label="Lọc trạng thái"><option value="">Status: Tất cả</option>{STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</select>
-        <select value={customRoleFilter} onChange={(event) => updateFilter(setCustomRoleFilter, event.target.value)} aria-label="Lọc Custom Role"><option value="">Custom Role: Tất cả</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.status})</option>)}</select>
-        <select value={sortBy} onChange={(event) => updateFilter(setSortBy, event.target.value)} aria-label="Sắp xếp"><option value="name">Sort: Name</option>{SORT_OPTIONS.slice(1).map(([value, label]) => <option key={value} value={value}>Sort: {label}</option>)}</select>
-        <button type="button" className="admin-secondary-button sort-direction-button" onClick={() => setSortDirection((current) => current === 'asc' ? 'desc' : 'asc')} aria-label="Đổi chiều sắp xếp">{sortDirection === 'asc' ? '↑' : '↓'}</button>
+        <AsyncSearchSelect label="Lọc Custom Role" value={customRoleFilter} selectedOption={selectedRoleFilter} onChange={(value, option) => { updateFilter(setCustomRoleFilter, value); setSelectedRoleFilter(option) }} loadOptions={searchCustomRoles} getLabel={(role) => role.name || role.id} getMeta={(role) => `${role.status || 'active'} · ${role.id}`} placeholder="Tìm Custom Role..." helperText="Tìm role theo tên trên server; không tải toàn bộ role." />
+        <span className="admin-field-help">Kết quả được sắp xếp theo tên hoặc email ở phía máy chủ.</span>
       </div>
       {error && <p className="admin-error" role="alert">{error}</p>}
       {message && <p className="admin-success" role="status">{message}</p>}
@@ -272,7 +284,8 @@ export default function AdminUsersPage() {
       </>}
     </div>
 
-    {selected && <UserDrawer user={selected} actor={actor} roleMap={roleMap} activeRoles={availableRoles} roleToAssign={roleToAssign} assignmentPreview={assignmentPreview} setRoleToAssign={setRoleToAssign} profileDraft={profileDraft} setProfileDraft={setProfileDraft} systemRoleToSet={systemRoleToSet} setSystemRoleToSet={setSystemRoleToSet} assignableSystemRoles={ASSIGNABLE_SYSTEM_ROLES} currentUser={currentUser} busy={busy} canAssign={canAssign} canRevoke={canRevoke} canUpdateProfile={canUpdateProfile} canManageSystemRole={canManageSystemRole} onClose={() => setSelectedId('')} onAssign={() => { mutateCustomRole('assign', roleToAssign); setRoleToAssign('') }} onProfileUpdate={mutateProfile} onSystemRoleChange={mutateSystemRole} onRevoke={(roleId) => setRevokeTarget({ user: selected, roleId })} />}
+    <CursorPagination page={page} hasMore={hasMore} loading={loading} rangeLabel={`Hiá»ƒn thá»‹ ${(page - 1) * PAGE_SIZE + 1}â€“${(page - 1) * PAGE_SIZE + users.length}${hasMore ? '+' : ''}`} onPrevious={() => loadUsersPage(pageCursors[Math.max(0, page - 2)] || null, page - 1)} onNext={() => loadUsersPage(nextCursor, page + 1)} />
+    {selected && <UserDrawer user={selected} actor={actor} roleMap={roleMap} roleToAssign={roleToAssign} selectedRoleOption={selectedRoleOption} searchCustomRoles={searchCustomRoles} assignmentPreview={assignmentPreview} setRoleToAssign={setRoleToAssign} onRoleSelect={(value, option) => { setRoleToAssign(value); setSelectedRoleOption(option); setRoles((current) => option && !current.some((role) => role.id === option.id) ? [...current, option] : current) }} profileDraft={profileDraft} setProfileDraft={setProfileDraft} systemRoleToSet={systemRoleToSet} setSystemRoleToSet={setSystemRoleToSet} assignableSystemRoles={ASSIGNABLE_SYSTEM_ROLES} currentUser={currentUser} busy={busy} canAssign={canAssign} canRevoke={canRevoke} canUpdateProfile={canUpdateProfile} canManageSystemRole={canManageSystemRole} onClose={() => setSelectedId('')} onAssign={() => { mutateCustomRole('assign', roleToAssign); setRoleToAssign(''); setSelectedRoleOption(null) }} onProfileUpdate={mutateProfile} onSystemRoleChange={mutateSystemRole} onRevoke={(roleId) => setRevokeTarget({ user: selected, roleId })} />}
     {revokeTarget && <RevokeModal target={revokeTarget} roleMap={roleMap} busy={busy} onCancel={() => setRevokeTarget(null)} onConfirm={confirmRevoke} />}
   </section>
 }
@@ -290,7 +303,7 @@ function UserRow({ user, roleMap, onSelect }) {
   </tr>
 }
 
-function UserDrawer({ user, actor, roleMap, activeRoles, roleToAssign, assignmentPreview, setRoleToAssign, profileDraft, setProfileDraft, systemRoleToSet, setSystemRoleToSet, assignableSystemRoles, currentUser, busy, canAssign, canRevoke, canUpdateProfile, canManageSystemRole, onClose, onAssign, onProfileUpdate, onSystemRoleChange, onRevoke }) {
+function UserDrawer({ user, actor, roleMap, roleToAssign, selectedRoleOption, searchCustomRoles, assignmentPreview, setRoleToAssign, onRoleSelect, profileDraft, setProfileDraft, systemRoleToSet, setSystemRoleToSet, assignableSystemRoles, currentUser, busy, canAssign, canRevoke, canUpdateProfile, canManageSystemRole, onClose, onAssign, onProfileUpdate, onSystemRoleChange, onRevoke }) {
   const systemRole = getSystemRole(user)
   const systemRoleMetadata = getSystemRoleMetadata(systemRole)
   const rootTarget = isRootUser(user)
@@ -298,7 +311,7 @@ function UserDrawer({ user, actor, roleMap, activeRoles, roleToAssign, assignmen
   const effectivePermissions = getEffectivePermissions(user, roleMap)
   const sourceMap = buildPermissionSources(user, roleMap)
   const assignedRoles = (user.customRoles || []).map((roleId) => ({ id: roleId, role: roleMap[roleId] })).filter(({ role }) => role)
-  const selectedRole = roleToAssign ? roleMap[roleToAssign] : null
+  const selectedRole = roleToAssign ? roleMap[roleToAssign] || selectedRoleOption : null
   const recipientAfterAssignment = selectedRole ? { ...user, customRoles: [...new Set([...(user.customRoles || []), selectedRole.id])] } : null
   const recipientDelegationScope = recipientAfterAssignment ? getDelegationScope(recipientAfterAssignment, roleMap) : []
   return <div className="user-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
@@ -306,7 +319,7 @@ function UserDrawer({ user, actor, roleMap, activeRoles, roleToAssign, assignmen
       <div className="drawer-header"><div><h3 id="user-detail-title">Chi tiết người dùng</h3><p>{user.email || user.uid}</p></div><button type="button" className="drawer-close-button" onClick={onClose} aria-label="Đóng">×</button></div>
       <section className="drawer-section"><h4>Thông tin người dùng</h4><div className="drawer-profile-heading">{user.photoURL ? <img src={user.photoURL} alt="" /> : <span className="user-avatar-fallback large">{initials(user)}</span>}<div><strong>{user.displayName || 'Chưa có tên'}</strong><small>{user.email || '—'}</small></div></div><dl className="user-detail-meta"><div><dt>UID</dt><dd>{user.uid || user.id}</dd></div><div><dt>Status</dt><dd>{user.status || 'active'}</dd></div><div><dt>Created At</dt><dd>{formatDate(user.createdAt)}</dd></div><div><dt>Last Login</dt><dd>{formatDate(user.lastLoginAt)}</dd></div></dl>{canUpdateProfile && !protectedTarget && <div className="profile-edit-form"><label>Display name<input value={profileDraft.displayName} onChange={(event) => setProfileDraft({ ...profileDraft, displayName: event.target.value })} maxLength="200" /></label><label>Photo URL<input value={profileDraft.photoURL} onChange={(event) => setProfileDraft({ ...profileDraft, photoURL: event.target.value })} maxLength="2048" /></label><button type="button" className="admin-primary-button" onClick={onProfileUpdate} disabled={busy}>Lưu hồ sơ</button><small>Chỉ cập nhật display name và photo URL qua trusted backend.</small></div>}</section>
       <section className="drawer-section"><h4>System Role</h4><div className={`drawer-system-role ${rootTarget ? 'root' : ''}`}><div><span className="system-role-badge">{systemRole}</span><strong>{systemRoleMetadata.name}</strong></div><p>{systemRoleMetadata.description}</p><b>{rootTarget ? '🔒 ROOT PROTECTED' : canManageSystemRole && !protectedTarget ? 'ROOT ONLY' : 'READ ONLY'}</b></div>{canManageSystemRole && !rootTarget && !protectedTarget && <div className="drawer-assign-row"><select value={systemRoleToSet || systemRole} onChange={(event) => setSystemRoleToSet(event.target.value)} disabled={busy} aria-label="System Role mới">{assignableSystemRoles.map((role) => <option key={role} value={role}>{getSystemRoleMetadata(role).name} ({role})</option>)}</select><button type="button" className="admin-primary-button" onClick={() => onSystemRoleChange(systemRoleToSet || systemRole)} disabled={busy || !systemRoleToSet || systemRoleToSet === systemRole}>Cập nhật</button></div>}<p className="drawer-note">System Role và status chỉ được thay đổi qua trusted backend; client không ghi Firestore trực tiếp.</p></section>
-      <section className="drawer-section"><h4>Custom Roles</h4><div className="drawer-assigned-roles">{assignedRoles.length ? assignedRoles.map(({ id, role }) => <div className="drawer-role-item" key={id}><div><strong>{roleLabel(role)}</strong><span className={role.status === 'disabled' ? 'disabled-text' : ''}>{role.status} · {(role.permissions || []).length} quyền</span><small>{role.description || 'Không có mô tả'}</small></div>{canRevoke && <button type="button" onClick={() => onRevoke(id)} disabled={busy || protectedTarget}>Thu hồi</button>}</div>) : <p className="admin-muted">Chưa có Custom Role.</p>}</div>{canAssign && <div className="drawer-assign-row"><select value={roleToAssign} onChange={(event) => setRoleToAssign(event.target.value)} disabled={busy || protectedTarget}><option value="">Chọn Custom Role active</option>{activeRoles.map((role) => <option key={role.id} value={role.id}>{role.name} ({role.id})</option>)}</select><button type="button" className="admin-primary-button" onClick={onAssign} disabled={!roleToAssign || busy || protectedTarget || !assignmentPreview?.canDelegate}>+ Gán</button></div>}{assignmentPreview && <AssignmentPreview role={selectedRole} preview={assignmentPreview} recipientDelegationScope={recipientDelegationScope} />}{!canAssign && !canRevoke && <p className="drawer-note">Custom Roles chỉ đọc với tài khoản hiện tại.</p>}{protectedTarget && <p className="admin-warning">{rootTarget ? 'ROOT được bảo vệ, không thể quản lý Custom Role trên browser.' : 'Không thể tự thay đổi Custom Role của chính mình.'}</p>}</section>
+      <section className="drawer-section"><h4>Custom Roles</h4><div className="drawer-assigned-roles">{assignedRoles.length ? assignedRoles.map(({ id, role }) => <div className="drawer-role-item" key={id}><div><strong>{roleLabel(role)}</strong><span className={role.status === 'disabled' ? 'disabled-text' : ''}>{role.status} · {(role.permissions || []).length} quyền</span><small>{role.description || 'Không có mô tả'}</small></div>{canRevoke && <button type="button" onClick={() => onRevoke(id)} disabled={busy || protectedTarget}>Thu hồi</button>}</div>) : <p className="admin-muted">Chưa có Custom Role.</p>}</div>{canAssign && <div className="drawer-assign-row"><AsyncSearchSelect label="Custom Role" value={roleToAssign} selectedOption={selectedRoleOption} onChange={onRoleSelect} loadOptions={searchCustomRoles} getLabel={(role) => role.name || role.id} getMeta={(role) => `${role.status || 'active'} · ${role.id}`} placeholder="Tìm Custom Role..." helperText="Tìm role trên server theo tên; chỉ role active được trả về." disabled={busy || protectedTarget} /><button type="button" className="admin-primary-button" onClick={onAssign} disabled={!roleToAssign || busy || protectedTarget || !assignmentPreview?.canDelegate}>+ Gán</button></div>}{assignmentPreview && <AssignmentPreview role={selectedRole} preview={assignmentPreview} recipientDelegationScope={recipientDelegationScope} />}{!canAssign && !canRevoke && <p className="drawer-note">Custom Roles chỉ đọc với tài khoản hiện tại.</p>}{protectedTarget && <p className="admin-warning">{rootTarget ? 'ROOT được bảo vệ, không thể quản lý Custom Role trên browser.' : 'Không thể tự thay đổi Custom Role của chính mình.'}</p>}</section>
       <section className="drawer-section"><h4>Effective Permissions <small>{effectivePermissions.length} quyền</small></h4>{effectivePermissions.length ? <div className="effective-permission-groups">{permissionGroups(effectivePermissions).map((group) => <div key={group.key}><strong>{group.label}</strong><PermissionExplanationList permissions={group.permissions} sourceMap={sourceMap} roleMap={roleMap} /></div>)}</div> : <p className="admin-muted">Không có quyền hiệu lực.</p>}</section>
     </aside>
   </div>

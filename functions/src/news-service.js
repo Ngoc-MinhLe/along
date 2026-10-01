@@ -1,4 +1,5 @@
 const { HttpsError } = require('firebase-functions/v2/https')
+const { FieldPath, Timestamp } = require('firebase-admin/firestore')
 const { adminDb } = require('./admin')
 const {
   assertNoClientActorUid,
@@ -11,6 +12,24 @@ const ACCESS_MODES = Object.freeze({ PUBLIC: 'PUBLIC', VIP: 'VIP', SPECIAL: 'SPE
 const MAX_LIST_LIMIT = 50
 const MAX_SCAN_LIMIT = 100
 const MAX_SELECTOR_LIMIT = 50
+
+function encodeCursor(value) {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
+}
+
+function decodeCursor(value) {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string' || value.length > 2048) invalidArgument('cursor is invalid.')
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    if (!decoded || typeof decoded.field !== 'string' || !['title', 'name', 'displayName', 'email', 'updatedAt'].includes(decoded.field)
+      || typeof decoded.id !== 'string' || !decoded.id) invalidArgument('cursor is invalid.')
+    if (decoded.field === 'updatedAt' ? !Number.isFinite(decoded.value) : typeof decoded.value !== 'string') invalidArgument('cursor is invalid.')
+    return decoded
+  } catch {
+    invalidArgument('cursor is invalid.')
+  }
+}
 
 function invalidArgument(message) {
   throw new HttpsError('invalid-argument', message)
@@ -49,7 +68,7 @@ function normalizeListPayload(data) {
 }
 
 function normalizeSelectorPayload(data, allowedKeys = []) {
-  assertAllowedKeys(data || {}, ['query', 'limit', ...allowedKeys])
+  assertAllowedKeys(data || {}, ['query', 'limit', 'cursor', ...allowedKeys])
   const query = data?.query
   if (query !== undefined && (typeof query !== 'string' || query.length > 120)) {
     invalidArgument('query must be a string with at most 120 characters.')
@@ -58,7 +77,23 @@ function normalizeSelectorPayload(data, allowedKeys = []) {
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SELECTOR_LIMIT) {
     invalidArgument(`limit must be an integer from 1 to ${MAX_SELECTOR_LIMIT}.`)
   }
-  return { query: query?.trim() || '', limit }
+  return { query: query?.trim() || '', limit, cursor: decodeCursor(data?.cursor) }
+}
+
+function normalizeManagementPayload(data) {
+  const payload = normalizeSelectorPayload(data, ['status', 'categoryId'])
+  const status = data?.status === undefined || data.status === '' ? null : data.status
+  if (status !== null && !['draft', 'published', 'archived'].includes(status)) invalidArgument('status is invalid.')
+  const categoryId = data?.categoryId === undefined || data.categoryId === '' ? null : data.categoryId
+  if (categoryId !== null && (typeof categoryId !== 'string' || categoryId.length > 128)) invalidArgument('categoryId is invalid.')
+  return { ...payload, status, categoryId }
+}
+
+function applyStringCursor(query, payload, field) {
+  if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
+  else if (payload.query) query = query.startAt(payload.query)
+  if (payload.query) query = query.endAt(`${payload.query}\uf8ff`)
+  return query
 }
 
 function requireAnyPermission(actor, permissions) {
@@ -291,13 +326,19 @@ function managementArticleData(snapshot, articleId, { includeContent = false } =
 
 async function listNewsManagement(actor, data, db = adminDb) {
   requireAnyPermission(actor, ['news.read', 'news.create', 'news.update', 'news.delete', 'news.publish', 'news.restore'])
-  const payload = normalizeSelectorPayload(data)
+  const payload = normalizeManagementPayload(data)
   const queryText = payload.query.toLowerCase()
   let query = db.collection('newsArticles')
+  if (payload.status) query = query.where('status', '==', payload.status)
+  if (payload.categoryId) query = query.where('categoryId', '==', payload.categoryId)
   if (payload.query) {
-    query = query.orderBy('title').startAt(payload.query).endAt(`${payload.query}\uf8ff`)
+    query = query.orderBy('title').orderBy(FieldPath.documentId())
+    if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
+    else query = query.startAt(payload.query)
+    query = query.endAt(`${payload.query}\uf8ff`)
   } else {
-    query = query.orderBy('updatedAt', 'desc')
+    query = query.orderBy('updatedAt', 'desc').orderBy(FieldPath.documentId(), 'desc')
+    if (payload.cursor) query = query.startAfter(Timestamp.fromMillis(payload.cursor.value), payload.cursor.id)
   }
   const snapshot = await query.limit(payload.limit).get()
   const items = snapshot.docs
@@ -306,7 +347,11 @@ async function listNewsManagement(actor, data, db = adminDb) {
       const searchable = `${item.title} ${item.slug}`.toLowerCase()
       return !queryText || searchable.includes(queryText)
     })
-  return { ok: true, items }
+  const last = snapshot.docs.at(-1)
+  const cursorValue = last ? (payload.query
+    ? String(last.data()?.title || '')
+    : (last.data()?.updatedAt?.toMillis?.() || 0)) : null
+  return { ok: true, items, hasMore: snapshot.docs.length === payload.limit, nextCursor: last ? encodeCursor({ field: payload.query ? 'title' : 'updatedAt', value: cursorValue, id: last.id }) : null }
 }
 
 async function getNewsManagementArticle(actor, data, db = adminDb) {
@@ -322,11 +367,13 @@ async function listNewsCategories(actor, data, db = adminDb) {
   if (includeDisabled) requireAnyPermission(actor, ['news.create', 'news.update', 'news.delete'])
   const queryText = payload.query.toLowerCase()
   let query = db.collection('newsCategories')
+  if (!includeDisabled) query = query.where('status', '==', 'active')
+  query = query.orderBy('name').orderBy(FieldPath.documentId())
   if (payload.query) {
-    query = query.orderBy('name').startAt(payload.query).endAt(`${payload.query}\uf8ff`)
-  } else {
-    query = query.orderBy('name')
-  }
+    if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
+    else query = query.startAt(payload.query)
+    query = query.endAt(`${payload.query}\uf8ff`)
+  } else if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
   const snapshot = await query.limit(payload.limit).get()
   const items = snapshot.docs
     .map((item) => {
@@ -341,14 +388,20 @@ async function listNewsCategories(actor, data, db = adminDb) {
     })
     .filter((item) => (includeDisabled || item.status === 'active')
       && (!queryText || `${item.name} ${item.description}`.toLowerCase().includes(queryText)))
-  return { ok: true, items }
+  const last = snapshot.docs.at(-1)
+  return { ok: true, items, hasMore: snapshot.docs.length === payload.limit, nextCursor: last ? encodeCursor({ field: 'name', value: String(last.data()?.name || ''), id: last.id }) : null }
 }
 
 async function listNewsUsers(actor, data, db = adminDb) {
   requireAnyPermission(actor, ['news.update'])
   const payload = normalizeSelectorPayload(data)
-  let query = db.collection('users').orderBy('displayName')
-  if (payload.query) query = query.startAt(payload.query).endAt(`${payload.query}\uf8ff`)
+  const searchField = payload.query.includes('@') ? 'email' : 'displayName'
+  let query = db.collection('users').where('status', '==', 'active').orderBy(searchField).orderBy(FieldPath.documentId())
+  if (payload.query) {
+    if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
+    else query = query.startAt(payload.query)
+    query = query.endAt(`${payload.query}\uf8ff`)
+  } else if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
   const snapshot = await query.limit(payload.limit).get()
   const queryText = payload.query.toLowerCase()
   const items = snapshot.docs.map((item) => {
@@ -360,16 +413,21 @@ async function listNewsUsers(actor, data, db = adminDb) {
       displayName: typeof data.displayName === 'string' ? data.displayName : '',
       status: data.status || 'active',
     }
-  }).filter((item) => item.uid && item.status === 'active'
-    && (!queryText || `${item.displayName} ${item.email}`.toLowerCase().includes(queryText)))
-  return { ok: true, items }
+  }).filter((item) => item.uid)
+  const last = snapshot.docs.at(-1)
+  return { ok: true, items, hasMore: snapshot.docs.length === payload.limit, nextCursor: last ? encodeCursor({ field: searchField, value: String(last.data()?.[searchField] || ''), id: last.id }) : null }
 }
 
 async function listNewsGroups(actor, data, db = adminDb) {
   requireAnyPermission(actor, ['news.update'])
   const payload = normalizeSelectorPayload(data)
-  const snapshot = await db.collection('newsGroups').limit(payload.limit).get()
-  const queryText = payload.query.toLowerCase()
+  let query = db.collection('newsGroups').where('status', '==', 'active').orderBy('name').orderBy(FieldPath.documentId())
+  if (payload.query) {
+    if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
+    else query = query.startAt(payload.query)
+    query = query.endAt(`${payload.query}\uf8ff`)
+  } else if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
+  const snapshot = await query.limit(payload.limit).get()
   const items = snapshot.docs.map((item) => {
     const data = item.data()
     return {
@@ -377,9 +435,9 @@ async function listNewsGroups(actor, data, db = adminDb) {
       name: typeof data.name === 'string' ? data.name : item.id,
       status: data.status,
     }
-  }).filter((item) => item.status === 'active'
-    && (!queryText || item.name.toLowerCase().includes(queryText) || item.id.toLowerCase().includes(queryText)))
-  return { ok: true, items }
+  })
+  const last = snapshot.docs.at(-1)
+  return { ok: true, items, hasMore: snapshot.docs.length === payload.limit, nextCursor: last ? encodeCursor({ field: 'name', value: String(last.data()?.name || ''), id: last.id }) : null }
 }
 
 async function invokeNews(request, handler) {

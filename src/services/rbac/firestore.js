@@ -1,23 +1,28 @@
 import {
-  collection,
   doc,
   getDoc,
-  getDocs,
-  orderBy,
-  query,
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { db } from '../../firebase/client'
+import { functions } from '../../firebase/client'
 
 function requireDb() {
   if (!db) throw new Error('Firestore chưa được cấu hình.')
   return db
 }
 
-export async function listCustomRoles() {
-  const snapshot = await getDocs(query(collection(requireDb(), 'roles'), orderBy('updatedAt', 'desc')))
-  return snapshot.docs
-    .map((item) => ({ id: item.id, ...item.data() }))
-    .filter((role) => role.type === 'CUSTOM')
+export async function listCustomRoles({ pageSize = 50, cursor = null, status = '', query = '' } = {}) {
+  if (!functions) throw new Error('Firebase Functions chÆ°a Ä‘Æ°á»£c cáº¥u hÃ¬nh.')
+  const callable = httpsCallable(functions, 'listCustomRoles')
+  const response = await callable({ pageSize, ...(cursor ? { cursor } : {}), ...(status ? { status } : {}), ...(query.trim() ? { query: query.trim() } : {}) })
+  return response.data?.items || []
+}
+
+export async function listCustomRolesPage({ pageSize = 50, cursor = null, status = '', query = '' } = {}) {
+  if (!functions) throw new Error('Firebase Functions is not configured.')
+  const callable = httpsCallable(functions, 'listCustomRoles')
+  const response = await callable({ pageSize, ...(cursor ? { cursor } : {}), ...(status ? { status } : {}), ...(query.trim() ? { query: query.trim() } : {}) })
+  return response.data
 }
 
 export async function getCustomRolesByIds(roleIds = []) {
@@ -28,6 +33,17 @@ export async function getCustomRolesByIds(roleIds = []) {
 }
 
 export async function listUsers() {
-  const snapshot = await getDocs(collection(requireDb(), 'users'))
-  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))
+  const result = await listUsersPage({ pageSize: 50 })
+  return result.items || []
+}
+
+function requireFunctions() {
+  if (!functions) throw new Error('Firebase Functions chÆ°a Ä‘Æ°á»£c cáº¥u hÃ¬nh.')
+  return functions
+}
+
+export async function listUsersPage(payload = {}) {
+  const callable = httpsCallable(requireFunctions(), 'listUsers')
+  const response = await callable(payload)
+  return response.data
 }

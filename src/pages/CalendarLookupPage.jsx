@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import CalendarImportPanel from '../components/CalendarImportPanel'
+import CursorPagination from '../components/CursorPagination'
 import { usePermissions } from '../auth/PermissionContext'
 import { listCalendarImports, searchCalendarEntries } from '../services/calendarImports'
 import { PERMISSIONS } from '../services/rbac/permissions'
@@ -47,6 +48,11 @@ export default function CalendarLookupPage() {
   const canImport = hasPermission(PERMISSIONS.CALENDAR_IMPORT)
   const canExport = hasPermission(PERMISSIONS.CALENDAR_EXPORT)
   const [imports, setImports] = useState([])
+  const [importsCursor, setImportsCursor] = useState(null)
+  const [importsHasMore, setImportsHasMore] = useState(false)
+  const [importsLoading, setImportsLoading] = useState(false)
+  const [importsPage, setImportsPage] = useState(1)
+  const [importsCursors, setImportsCursors] = useState([null])
   const [selectedId, setSelectedId] = useState('')
   const [filters, setFilters] = useState({})
   const [activeAdvancedKeys, setActiveAdvancedKeys] = useState([])
@@ -60,13 +66,18 @@ export default function CalendarLookupPage() {
   const [message, setMessage] = useState('')
   const [detailRow, setDetailRow] = useState(null)
 
-  async function loadImports() {
+  async function loadImports(cursor = null, page = 1) {
+    setImportsLoading(true)
     try {
-      const result = await listCalendarImports()
-      const completed = result.filter((item) => item.status === 'completed')
+      const result = await listCalendarImports({ cursor, pageSize: 25 })
+      const completed = result.items.filter((item) => item.status === 'completed')
       setImports(completed)
+      setImportsCursor(result.cursor)
+      setImportsHasMore(result.hasMore)
+      setImportsPage(page)
+      setImportsCursors((current) => { const next = current.slice(0, page); next[page] = result.cursor; return next })
       setSelectedId((current) => current || completed[0]?.id || '')
-    } catch (error) { setMessage(error.message) }
+    } catch (error) { setMessage(error.message) } finally { setImportsLoading(false) }
   }
 
   useEffect(() => { if (!permissionsLoading && canSearch) loadImports() }, [canSearch, permissionsLoading])
@@ -115,7 +126,7 @@ export default function CalendarLookupPage() {
     setOpenGroups((current) => { const next = new Set(current); if (next.has(label)) next.delete(label); else next.add(label); return next })
   }
   function clearFilters() { setFilters({}); setActiveAdvancedKeys([]); setRows([]); setCursor(null); setHasMore(false) }
-  function handleImportDone() { setRows([]); setCursor(null); loadImports() }
+  function handleImportDone() { setRows([]); setCursor(null); loadImports(null) }
 
   function exportResults() {
     if (!canExport) {
@@ -146,6 +157,7 @@ export default function CalendarLookupPage() {
     <section className="page-section">
       <div className="page-title-row"><div><p className="eyebrow">MODULE 1</p><h2>Tra cứu lịch</h2><p className="lead">Chọn bộ dữ liệu và các tiêu chí cần thiết để tra cứu trực tiếp từ Firestore.</p></div><span className="phase-badge">Đang hoạt động</span></div>
       {canImport && <CalendarImportPanel onImported={handleImportDone} />}
+      {canSearch && <CursorPagination page={importsPage} hasMore={importsHasMore} loading={importsLoading} rangeLabel="Lịch sử import theo từng trang" onPrevious={() => loadImports(importsCursors[Math.max(0, importsPage - 2)] || null, importsPage - 1)} onNext={() => loadImports(importsCursor, importsPage + 1)} />}
       <section className="lookup-card">
         <div className="card-heading"><div><p className="eyebrow">FIRESTORE</p><h3>Tìm kiếm dữ liệu lịch</h3></div>{canExport && <button className="secondary-button" onClick={exportResults} disabled={!rows.length}>Xuất kết quả ra Excel</button>}</div>
         {!canSearch && <div className="access-denied" role="alert"><h3>Không có quyền tra cứu</h3><p>Tài khoản hiện tại không có quyền <code>calendar.search</code>.</p></div>}

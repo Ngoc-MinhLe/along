@@ -6,16 +6,16 @@ function callMembershipFunction(name, payload = {}) {
   return httpsCallable(functions, name)(payload).then((response) => response.data)
 }
 
-export function listMembershipTiers({ includeInactive = false } = {}) {
-  return callMembershipFunction('listMembershipTiers', { includeInactive })
+export function listMembershipTiers({ includeInactive = false, limit = 25, cursor = null, query = '' } = {}) {
+  return callMembershipFunction('listMembershipTiers', { includeInactive, limit, ...(cursor ? { cursor } : {}), ...(query.trim() ? { query: query.trim() } : {}) })
 }
 
-export function listMemberships({ limit = 25 } = {}) {
-  return callMembershipFunction('listMemberships', { limit })
+export function listMemberships({ limit = 25, cursor = null, status = '', tierId = '' } = {}) {
+  return callMembershipFunction('listMemberships', { limit, ...(cursor ? { cursor } : {}), ...(status ? { status } : {}), ...(tierId ? { tierId } : {}) })
 }
 
-export function getUserMemberships(userId, { limit = 25 } = {}) {
-  return callMembershipFunction('getUserMemberships', { userId, limit })
+export function getUserMemberships(userId, { limit = 25, cursor = null, status = '', tierId = '' } = {}) {
+  return callMembershipFunction('getUserMemberships', { userId, limit, ...(cursor ? { cursor } : {}), ...(status ? { status } : {}), ...(tierId ? { tierId } : {}) })
 }
 
 export function createManualMembership({ userId, tierId, startsAt, expiresAt = null }) {

@@ -1,5 +1,5 @@
 const { HttpsError } = require('firebase-functions/v2/https')
-const { Timestamp } = require('firebase-admin/firestore')
+const { FieldPath, Timestamp } = require('firebase-admin/firestore')
 const { adminAuth, adminDb } = require('./admin')
 const { getTrustedActor, requirePermission, SYSTEM_ROLES } = require('./auth')
 const { readProfile } = require('./custom-role-service')
@@ -19,6 +19,48 @@ function notFound(message) {
 
 function permissionDenied(message) {
   throw new HttpsError('permission-denied', message)
+}
+
+const DEFAULT_LIST_LIMIT = 25
+const MAX_LIST_LIMIT = 50
+const USER_LIST_FIELDS = new Set(['displayName', 'email'])
+
+function encodeCursor(value) {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
+}
+
+function decodeCursor(value) {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string' || value.length > 2048) invalidArgument('cursor is invalid.')
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    if (!decoded || !USER_LIST_FIELDS.has(decoded.field) || typeof decoded.value !== 'string'
+      || typeof decoded.id !== 'string' || !decoded.id) invalidArgument('cursor is invalid.')
+    return decoded
+  } catch {
+    invalidArgument('cursor is invalid.')
+  }
+}
+
+function normalizeUserListPayload(data) {
+  const value = data || {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) invalidArgument('Request payload must be an object.')
+  const allowed = ['query', 'status', 'systemRole', 'customRoleId', 'pageSize', 'cursor']
+  const unsupported = Object.keys(value).find((key) => !allowed.includes(key))
+  if (unsupported) invalidArgument(`Unsupported request field: ${unsupported}.`)
+  const query = value.query === undefined ? '' : value.query
+  if (typeof query !== 'string' || query.trim().length > 120) invalidArgument('query must be a string with at most 120 characters.')
+  const status = value.status === undefined || value.status === '' ? null : value.status
+  if (status !== null && !['active', 'suspended', 'disabled', 'deletion_requested', 'deleted'].includes(status)) invalidArgument('status is invalid.')
+  const systemRole = value.systemRole === undefined || value.systemRole === '' ? null : value.systemRole
+  if (systemRole !== null && !Object.values(SYSTEM_ROLES).includes(systemRole)) invalidArgument('systemRole is invalid.')
+  const customRoleId = value.customRoleId === undefined || value.customRoleId === '' ? null : value.customRoleId
+  if (customRoleId !== null && (typeof customRoleId !== 'string' || customRoleId.length > 128)) invalidArgument('customRoleId is invalid.')
+  const pageSize = value.pageSize === undefined ? DEFAULT_LIST_LIMIT : value.pageSize
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_LIST_LIMIT) {
+    invalidArgument(`pageSize must be an integer from 1 to ${MAX_LIST_LIMIT}.`)
+  }
+  return { query: query.trim(), status, systemRole, customRoleId, pageSize, cursor: decodeCursor(value.cursor) }
 }
 
 function normalizePayload(data) {
@@ -151,12 +193,59 @@ async function updateUserProfile(actor, data, db = adminDb, auth = adminAuth) {
   }
 }
 
+async function listUsers(actor, data, db = adminDb) {
+  requirePermission(actor, 'users.read')
+  const payload = normalizeUserListPayload(data)
+  const searchField = payload.query.includes('@') ? 'email' : 'displayName'
+  let userQuery = db.collection('users')
+  if (payload.status) userQuery = userQuery.where('status', '==', payload.status)
+  if (payload.systemRole) userQuery = userQuery.where('systemRole', '==', payload.systemRole)
+  if (payload.customRoleId) userQuery = userQuery.where('customRoles', 'array-contains', payload.customRoleId)
+  userQuery = userQuery.orderBy(searchField).orderBy(FieldPath.documentId())
+  if (payload.query) userQuery = userQuery.endAt(`${payload.query}\uf8ff`)
+  if (payload.cursor) userQuery = userQuery.startAfter(payload.cursor.value, payload.cursor.id)
+  else if (payload.query) userQuery = userQuery.startAt(payload.query)
+  const snapshot = await userQuery.limit(payload.pageSize + 1).get()
+  const docs = snapshot.docs.slice(0, payload.pageSize)
+  const items = docs.map((item) => {
+    const user = item.data()
+    return {
+      id: item.id,
+      uid: user.uid === item.id ? item.id : null,
+      email: typeof user.email === 'string' ? user.email : '',
+      displayName: typeof user.displayName === 'string' ? user.displayName : '',
+      photoURL: typeof user.photoURL === 'string' ? user.photoURL : '',
+      status: user.status || 'active',
+      systemRole: user.systemRole || SYSTEM_ROLES.USER,
+      customRoles: Array.isArray(user.customRoles) ? user.customRoles : [],
+      createdAt: user.createdAt || null,
+      updatedAt: user.updatedAt || null,
+    }
+  }).filter((user) => user.uid)
+  const last = docs.at(-1)
+  return {
+    ok: true,
+    items,
+    hasMore: snapshot.docs.length > payload.pageSize,
+    nextCursor: last ? encodeCursor({ field: searchField, value: String(last.data()?.[searchField] || ''), id: last.id }) : null,
+    pageSize: payload.pageSize,
+  }
+}
+
 async function invokeTrusted(request, handler, operation = 'updateUserProfile') {
   return invokeAudited(request, handler, operation)
 }
 
+async function invokeRead(request, handler) {
+  const actor = await getTrustedActor(request)
+  return handler(actor, request?.data || {})
+}
+
 module.exports = {
   normalizePayload,
+  normalizeUserListPayload,
+  listUsers,
   updateUserProfile,
   invokeTrusted,
+  invokeRead,
 }

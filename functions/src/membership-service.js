@@ -1,5 +1,5 @@
 const { HttpsError } = require('firebase-functions/v2/https')
-const { Timestamp } = require('firebase-admin/firestore')
+const { FieldPath, Timestamp } = require('firebase-admin/firestore')
 const { adminAuth, adminDb } = require('./admin')
 const {
   getTrustedActor,
@@ -16,6 +16,36 @@ const MAX_TIER_NAME_LENGTH = 160
 const MAX_TIER_DESCRIPTION_LENGTH = 2000
 const DEFAULT_LIST_LIMIT = 25
 const MAX_LIST_LIMIT = 100
+
+function encodeCursor(value) {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
+}
+
+function decodeCursor(value) {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string' || value.length > 2048) invalidArgument('cursor is invalid.')
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    if (!decoded || typeof decoded.id !== 'string' || !decoded.id || !Number.isFinite(decoded.createdAt)) invalidArgument('cursor is invalid.')
+    return decoded
+  } catch {
+    invalidArgument('cursor is invalid.')
+  }
+}
+
+function decodeTierCursor(value) {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string' || value.length > 2048) invalidArgument('cursor is invalid.')
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    const validLevel = decoded && typeof decoded.id === 'string' && decoded.id && Number.isSafeInteger(decoded.level)
+    const validName = decoded && typeof decoded.id === 'string' && decoded.id && typeof decoded.name === 'string'
+    if (!validLevel && !validName) invalidArgument('cursor is invalid.')
+    return decoded
+  } catch {
+    invalidArgument('cursor is invalid.')
+  }
+}
 
 function invalidArgument(message) {
   throw new HttpsError('invalid-argument', message)
@@ -129,13 +159,26 @@ function normalizeRevokePayload(data) {
 }
 
 function normalizeListPayload(data, { requireUserId = false } = {}) {
-  assertAllowedKeys(data || {}, requireUserId ? ['userId', 'limit'] : ['limit'])
+  assertAllowedKeys(data || {}, requireUserId ? ['userId', 'limit', 'cursor', 'status', 'tierId'] : ['limit', 'cursor', 'status', 'tierId'])
   const userId = requireUserId ? normalizeId(data?.userId, 'userId') : null
   const limit = data?.limit === undefined ? DEFAULT_LIST_LIMIT : data.limit
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT) {
     invalidArgument(`limit must be an integer from 1 to ${MAX_LIST_LIMIT}.`)
   }
-  return { userId, limit }
+  const status = data?.status === undefined || data.status === '' ? null : data.status
+  if (status !== null && !Object.values(MEMBERSHIP_STATUSES).includes(status)) invalidArgument('status is invalid.')
+  const tierId = data?.tierId === undefined || data.tierId === '' ? null : normalizeId(data.tierId, 'tierId')
+  return { userId, limit, cursor: decodeCursor(data?.cursor), status, tierId }
+}
+
+function normalizeTierListPayload(data) {
+  assertAllowedKeys(data || {}, ['includeInactive', 'limit', 'cursor', 'query'])
+  if (data?.includeInactive !== undefined && typeof data.includeInactive !== 'boolean') invalidArgument('includeInactive must be a boolean.')
+  const limit = data?.limit === undefined ? DEFAULT_LIST_LIMIT : data.limit
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT) invalidArgument(`limit must be an integer from 1 to ${MAX_LIST_LIMIT}.`)
+  const query = data?.query === undefined ? '' : data.query
+  if (typeof query !== 'string' || query.trim().length > 120) invalidArgument('query must be a string with at most 120 characters.')
+  return { includeInactive: data?.includeInactive === true, limit, cursor: decodeTierCursor(data?.cursor), query: query.trim() }
 }
 
 function normalizeTier(tierId, data) {
@@ -295,20 +338,32 @@ function requireMembershipManager(actor, permission) {
 }
 
 async function listMembershipTiers(actor, data, db = adminDb) {
-  assertAllowedKeys(data || {}, ['includeInactive'])
-  if (data?.includeInactive !== undefined && typeof data.includeInactive !== 'boolean') {
-    invalidArgument('includeInactive must be a boolean.')
+  const payload = normalizeTierListPayload(data)
+  if (payload.includeInactive) requireMembershipManager(actor, 'membership.read')
+  const numericQuery = payload.query && /^\d+$/.test(payload.query) ? Number(payload.query) : null
+  let tierQuery = db.collection('membershipTiers')
+  if (numericQuery !== null) {
+    tierQuery = tierQuery.where('level', '==', numericQuery).orderBy(FieldPath.documentId())
+    if (payload.cursor?.name === undefined && payload.cursor) tierQuery = tierQuery.startAfter(payload.cursor.id)
+  } else if (payload.query) {
+    tierQuery = tierQuery.orderBy('name').orderBy(FieldPath.documentId())
+    if (payload.cursor?.name !== undefined) tierQuery = tierQuery.startAfter(payload.cursor.name, payload.cursor.id)
+    else tierQuery = tierQuery.startAt(payload.query)
+    tierQuery = tierQuery.endAt(`${payload.query}\uf8ff`)
+  } else {
+    tierQuery = tierQuery.orderBy('level').orderBy(FieldPath.documentId())
+    if (payload.cursor) tierQuery = tierQuery.startAfter(payload.cursor.level, payload.cursor.id)
   }
-  const includeInactive = data?.includeInactive === true
-  if (includeInactive) requireMembershipManager(actor, 'membership.read')
-  const snapshot = await db.collection('membershipTiers').get()
-  const items = snapshot.docs
+  const snapshot = await tierQuery.limit(payload.limit + 1).get()
+  const documents = snapshot.docs.slice(0, payload.limit)
+  const items = documents
     .map((item) => normalizeTier(item.id, item.data()))
     .filter(Boolean)
-    .filter((item) => includeInactive || item.status === TIER_STATUSES.ACTIVE)
+    .filter((item) => payload.includeInactive || item.status === TIER_STATUSES.ACTIVE)
     .sort((left, right) => left.level - right.level || left.id.localeCompare(right.id))
     .map(({ id, tierId, name, level, status, active, description }) => ({ id, tierId, name, level, status, active, description }))
-  return { ok: true, items }
+  const last = documents.at(-1)
+  return { ok: true, items, hasMore: snapshot.docs.length > payload.limit, limit: payload.limit, nextCursor: last ? encodeCursor(numericQuery !== null ? { level: last.data()?.level, id: last.id } : payload.query ? { name: last.data()?.name || '', id: last.id } : { level: last.data()?.level, id: last.id }) : null }
 }
 
 async function createMembershipTier(actor, data, db = adminDb) {
@@ -402,23 +457,33 @@ async function deactivateMembershipTier(actor, data, db = adminDb) {
 async function listMemberships(actor, data, db = adminDb) {
   const payload = normalizeListPayload(data)
   requireMembershipManager(actor, 'membership.read')
-  const snapshot = await db.collection('memberships').orderBy('createdAt', 'desc').limit(payload.limit + 1).get()
+  let membershipQuery = db.collection('memberships')
+  if (payload.status) membershipQuery = membershipQuery.where('status', '==', payload.status)
+  if (payload.tierId) membershipQuery = membershipQuery.where('tierId', '==', payload.tierId)
+  membershipQuery = membershipQuery.orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc')
+  if (payload.cursor) membershipQuery = membershipQuery.startAfter(Timestamp.fromMillis(payload.cursor.createdAt), payload.cursor.id)
+  const snapshot = await membershipQuery.limit(payload.limit + 1).get()
   const hasMore = snapshot.docs.length > payload.limit
-  const items = await serializeMembershipDocuments(snapshot.docs.slice(0, payload.limit), db)
-  return { ok: true, items, hasMore, limit: payload.limit }
+  const documents = snapshot.docs.slice(0, payload.limit)
+  const items = await serializeMembershipDocuments(documents, db)
+  const last = documents.at(-1)
+  return { ok: true, items, hasMore, limit: payload.limit, nextCursor: last ? encodeCursor({ createdAt: last.data()?.createdAt?.toMillis?.() || 0, id: last.id }) : null }
 }
 
 async function getUserMemberships(actor, data, db = adminDb) {
   const payload = normalizeListPayload(data, { requireUserId: true })
   requireMembershipManager(actor, 'membership.read')
-  const snapshot = await db.collection('memberships')
-    .where('userId', '==', payload.userId)
-    .orderBy('createdAt', 'desc')
-    .limit(payload.limit + 1)
-    .get()
+  let membershipQuery = db.collection('memberships').where('userId', '==', payload.userId)
+  if (payload.status) membershipQuery = membershipQuery.where('status', '==', payload.status)
+  if (payload.tierId) membershipQuery = membershipQuery.where('tierId', '==', payload.tierId)
+  membershipQuery = membershipQuery.orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc')
+  if (payload.cursor) membershipQuery = membershipQuery.startAfter(Timestamp.fromMillis(payload.cursor.createdAt), payload.cursor.id)
+  const snapshot = await membershipQuery.limit(payload.limit + 1).get()
   const hasMore = snapshot.docs.length > payload.limit
-  const items = await serializeMembershipDocuments(snapshot.docs.slice(0, payload.limit), db)
-  return { ok: true, userId: payload.userId, items, hasMore, limit: payload.limit }
+  const documents = snapshot.docs.slice(0, payload.limit)
+  const items = await serializeMembershipDocuments(documents, db)
+  const last = documents.at(-1)
+  return { ok: true, userId: payload.userId, items, hasMore, limit: payload.limit, nextCursor: last ? encodeCursor({ createdAt: last.data()?.createdAt?.toMillis?.() || 0, id: last.id }) : null }
 }
 
 async function createManualMembership(actor, data, db = adminDb) {

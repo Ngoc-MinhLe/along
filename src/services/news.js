@@ -35,24 +35,24 @@ export function getNewsArticle(articleId) {
   return callNewsFunction('getNewsArticle', { articleId })
 }
 
-export function listNewsManagement({ query = '', limit = 20 } = {}) {
-  return callNewsFunction('listNewsManagement', { query, limit })
+export function listNewsManagement({ query = '', limit = 20, cursor = null, status = '', categoryId = '' } = {}) {
+  return callNewsFunction('listNewsManagement', { query, limit, ...(cursor ? { cursor } : {}), ...(status ? { status } : {}), ...(categoryId ? { categoryId } : {}) })
 }
 
 export function getNewsManagementArticle(articleId) {
   return callNewsFunction('getNewsManagementArticle', { articleId })
 }
 
-export function listNewsCategories({ query = '', limit = 20, includeDisabled = false } = {}) {
-  return callNewsFunction('listNewsCategories', { query, limit, includeDisabled })
+export function listNewsCategories({ query = '', limit = 20, cursor = null, includeDisabled = false } = {}) {
+  return callNewsFunction('listNewsCategories', { query, limit, ...(cursor ? { cursor } : {}), includeDisabled })
 }
 
-export function listNewsUsers({ query = '', limit = 20 } = {}) {
-  return callNewsFunction('listNewsUsers', { query, limit })
+export function listNewsUsers({ query = '', limit = 20, cursor = null } = {}) {
+  return callNewsFunction('listNewsUsers', { query, limit, ...(cursor ? { cursor } : {}) })
 }
 
-export function listNewsGroups({ query = '', limit = 20 } = {}) {
-  return callNewsFunction('listNewsGroups', { query, limit })
+export function listNewsGroups({ query = '', limit = 20, cursor = null } = {}) {
+  return callNewsFunction('listNewsGroups', { query, limit, ...(cursor ? { cursor } : {}) })
 }
 
 export function createNewsArticle({ title, slug, excerpt, content, contentFormat, categoryId, accessPolicy }) {

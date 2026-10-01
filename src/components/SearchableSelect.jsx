@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import AsyncSearchSelect from './AsyncSearchSelect'
 
 /**
  * A small, dependency-free resource picker. The selected value remains the
@@ -17,7 +18,27 @@ export default function SearchableSelect({
   disabled = false,
   loading = false,
   allowClear = true,
+  loadOptions,
+  selectedOption = null,
+  minQueryLength = 2,
+  helperText,
 }) {
+  if (loadOptions) {
+    return <AsyncSearchSelect
+      label={label}
+      value={value}
+      selectedOption={selectedOption}
+      onChange={onChange}
+      loadOptions={loadOptions}
+      getLabel={getLabel}
+      getMeta={getMeta}
+      placeholder={placeholder}
+      helperText={helperText || 'Nháº­p tá»« khÃ³a Ä‘á»ƒ tÃ¬m kiáº¿m trÃªn server.'}
+      minQueryLength={minQueryLength}
+      disabled={disabled || loading}
+      emptyMessage={emptyMessage}
+    />
+  }
   const [query, setQuery] = useState('')
   const selected = options.find((option) => option.id === value) || null
   const filtered = useMemo(() => {

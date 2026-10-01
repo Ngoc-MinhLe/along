@@ -944,3 +944,33 @@ No production data or deployment was changed by Phase 10.3.
 Current phase: **Phase 10.5 — COMPLETED locally**.
 Next proposed phase: **Phase 10.6 — News Entitlement / Group / Subscription
 Foundation**, after review and approval.
+
+## Current authoritative checkpoint - Phase 10.12
+
+- Phase 10.12 - Admin Scalability & Large-Data UX: **IMPLEMENTED LOCALLY;
+  TESTED; NOT DEPLOYED**.
+- Admin Users, Memberships, Custom Roles, News Management and Calendar import
+  history now use bounded reads and cursor pagination at their large-data
+  boundaries.
+- News ACL user/group selectors use debounced trusted server search. Membership
+  user selection no longer depends on a full users collection read.
+- Frontend administration uses shared `AsyncSearchSelect` and
+  `CursorPagination` components where the workflows require them.
+- Firestore composite-index configuration was expanded for the new queries, but
+  indexes have not been deployed.
+- Firestore Rules, RBAC hierarchy, permission catalog, authorization
+  materialization, canonical Membership schema, News access evaluator and
+  client direct-write restrictions were preserved.
+- All requested unit, emulator, RBAC/authorization, frontend, Rules, build and
+  scalability checks passed locally. Rules passed 84 assertions using an
+  isolated Firebase CLI/JDK 21 process configuration.
+- Known limitations remain: no browser E2E, no dedicated aggregate for Custom
+  Role assigned counts, and category/tier option lists remain bounded rather
+  than fully async.
+- No production data, Rules, Functions, indexes, Hosting, Vercel deployment,
+  commit or push was changed by Phase 10.12.
+
+Current phase: **Phase 10.12 - IMPLEMENTATION PASS; CHECKPOINT BEFORE DEPLOYMENT**.
+Next phase: **deployment review for Phase 10.12 indexes and affected read
+callables, followed by controlled browser verification**; this is a proposed
+next step and has not been started.

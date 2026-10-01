@@ -35,6 +35,7 @@
     "test:frontend-membership": "node scripts/membership-frontend-test.mjs",
     "test:frontend-news": "node scripts/news-frontend-test.mjs",
     "test:resource-selectors": "node scripts/resource-selector-test.mjs",
+    "test:admin-scalability": "node scripts/admin-scalability-test.mjs",
     "test:authorization": "node scripts/authorization-self-test.mjs",
     "rbac:rebuild-authorization": "node scripts/rebuild-authorization.mjs",
     "rbac:rebuild-all-authorizations": "node scripts/rebuild-all-authorizations.mjs",

@@ -3,7 +3,8 @@ import { usePermissions } from '../auth/PermissionContext'
 import { getPermissionMetadata, PERMISSION_GROUP_LABELS, PERMISSIONS, PERMISSION_VALUES } from '../services/rbac/permissions'
 import { CUSTOM_ROLE_FORBIDDEN_PERMISSIONS, getRoleDelegationPreview, ROLE_PERMISSIONS } from '../services/rbac/policy'
 import { getSystemRoleMetadata, ROLE_HIERARCHY } from '../services/rbac/roles'
-import { listCustomRoles, listUsers } from '../services/rbac/firestore'
+import { listCustomRolesPage } from '../services/rbac/firestore'
+import CursorPagination from '../components/CursorPagination'
 import { createCustomRole, deleteCustomRole, disableCustomRole, enableCustomRole, updateCustomRole } from '../services/rbac/functions'
 import { generateRoleId } from '../services/rbac/roleId'
 
@@ -29,13 +30,11 @@ function formatDate(value) {
 
 export default function AdminRolesPage() {
   const { actor, hasPermission } = usePermissions()
-  const canReadUsers = hasPermission(PERMISSIONS.USERS_READ)
   const canCreate = hasPermission(PERMISSIONS.ROLES_CREATE)
   const canUpdate = hasPermission(PERMISSIONS.ROLES_UPDATE)
   const canDisable = hasPermission(PERMISSIONS.ROLES_DISABLE)
   const canDelete = hasPermission(PERMISSIONS.ROLES_DELETE)
   const [roles, setRoles] = useState([])
-  const [users, setUsers] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [editingId, setEditingId] = useState('')
   const [viewingRoleId, setViewingRoleId] = useState('')
@@ -45,15 +44,22 @@ export default function AdminRolesPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [roleCursor, setRoleCursor] = useState(null)
+  const [rolePageCursors, setRolePageCursors] = useState([null])
+  const [rolePage, setRolePage] = useState(1)
+  const [roleHasMore, setRoleHasMore] = useState(false)
   const roleMap = useMemo(() => Object.fromEntries(roles.map((role) => [role.id, role])), [roles])
 
-  async function loadData() {
+  async function loadData(cursor = null, targetPage = 1) {
     setLoading(true)
     setError('')
     try {
-      const [nextRoles, nextUsers] = await Promise.all([listCustomRoles(), canReadUsers ? listUsers() : Promise.resolve([])])
-      setRoles(nextRoles)
-      setUsers(nextUsers)
+      const result = await listCustomRolesPage({ pageSize: 50, cursor })
+      setRoles(result.items || [])
+      setRoleCursor(result.nextCursor || null)
+      setRoleHasMore(Boolean(result.hasMore))
+      setRolePage(targetPage)
+      setRolePageCursors((current) => { const next = current.slice(0, targetPage); next[targetPage] = result.nextCursor || null; return next })
     } catch (loadError) {
       setError(loadError.message)
     } finally {
@@ -63,10 +69,7 @@ export default function AdminRolesPage() {
 
   useEffect(() => { loadData() }, [])
 
-  const assignedCounts = useMemo(() => users.reduce((counts, item) => {
-    ;(item.customRoles || []).forEach((roleId) => { counts[roleId] = (counts[roleId] || 0) + 1 })
-    return counts
-  }, {}), [users])
+  const assignedCounts = useMemo(() => Object.fromEntries(roles.map((role) => [role.id, role.assignedCount ?? null])), [roles])
 
   function openCreate() {
     if (!canCreate) return
@@ -150,7 +153,7 @@ export default function AdminRolesPage() {
       setError(`Bạn không có quyền ${PERMISSIONS.ROLES_DELETE}.`)
       return
     }
-    if (assignedCounts[role.id]) {
+    if (assignedCounts[role.id] > 0) {
       setError('Role đang được gán cho người dùng, không thể xóa.')
       return
     }
@@ -198,20 +201,21 @@ export default function AdminRolesPage() {
 
       {loading && <p className="admin-muted">Đang tải Custom Roles…</p>}
       {!loading && <div className="custom-role-list">{roles.map((role) => {
-        const assignedCount = assignedCounts[role.id] || 0
+        const assignedCount = assignedCounts[role.id] ?? 'unknown'
         const isViewing = viewingRoleId === role.id
         return <article className={`custom-role-card ${role.status === 'disabled' ? 'is-disabled' : ''}`} key={role.id}>
           <div className="custom-role-main">
             <div><div className="custom-role-title"><strong>{role.name}</strong><span className={`role-status-badge ${role.status}`}>{role.status}</span></div><code>{role.id}</code><p>{role.description || 'Không có mô tả'}</p><small>{(role.permissions || []).length} quyền · {assignedCount} người dùng</small></div>
             <div className="custom-role-meta"><span>Created by: {role.createdBy || '—'}</span><span>Created: {formatDate(role.createdAt)}</span><span>Updated: {formatDate(role.updatedAt)}</span></div>
           </div>
-          <div className="admin-row-actions"><button type="button" onClick={() => setViewingRoleId(isViewing ? '' : role.id)}>{isViewing ? 'Ẩn quyền' : 'Xem quyền'}</button>{canUpdate && <button type="button" onClick={() => openEdit(role)}>Sửa quyền</button>}{canDisable && <button type="button" onClick={() => changeStatus(role)} disabled={saving}>{role.status === 'active' ? 'Disable' : 'Enable'}</button>}{canDelete && <button type="button" onClick={() => requestDelete(role)} disabled={Boolean(assignedCount) || saving}>Xóa</button>}</div>
+          <div className="admin-row-actions"><button type="button" onClick={() => setViewingRoleId(isViewing ? '' : role.id)}>{isViewing ? 'Ẩn quyền' : 'Xem quyền'}</button>{canUpdate && <button type="button" onClick={() => openEdit(role)}>Sửa quyền</button>}{canDisable && <button type="button" onClick={() => changeStatus(role)} disabled={saving}>{role.status === 'active' ? 'Disable' : 'Enable'}</button>}{canDelete && <button type="button" onClick={() => requestDelete(role)} disabled={saving}>Xóa</button>}</div>
           {assignedCount > 0 && <p className="role-delete-note">Role đang được gán cho người dùng, không thể xóa.</p>}
           {isViewing && <div className="custom-role-permission-view"><div><strong>{role.name}</strong><span>{(role.permissions || []).length} quyền</span></div><p>{role.description || 'Không có mô tả'}</p><PermissionCatalogView assignedPermissions={role.permissions || []} actor={actor} roleMap={roleMap} /><RoleDelegationNotice actor={actor} role={role} roleMap={roleMap} /></div>}
         </article>
       })}{!roles.length && <p className="admin-muted">Chưa có Custom Role.</p>}</div>}
     </section>
 
+    <CursorPagination page={rolePage} hasMore={roleHasMore} loading={loading || saving} rangeLabel={`Trang Custom Role ${rolePage}`} onPrevious={() => loadData(rolePageCursors[Math.max(0, rolePage - 2)] || null, rolePage - 1)} onNext={() => loadData(roleCursor, rolePage + 1)} />
     {deleteTarget && <div className="role-modal-backdrop" role="presentation"><div className="role-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-role-title"><h3 id="delete-role-title">Xóa Custom Role?</h3><p>Role <strong>{deleteTarget.name}</strong> ({deleteTarget.id}) sẽ bị xóa. Thao tác này không thể hoàn tác.</p><div className="admin-form-actions"><button className="admin-secondary-button" type="button" onClick={() => setDeleteTarget(null)} disabled={saving}>Hủy</button><button className="admin-danger-button" type="button" onClick={confirmDelete} disabled={saving}>{saving ? 'Đang xóa…' : 'Xác nhận xóa'}</button></div></div></div>}
   </div>
 }

@@ -6,6 +6,7 @@ function trustedCallable(handler, operation) {
 }
 
 const createCustomRole = trustedCallable(service.createCustomRole, 'createCustomRole')
+const listCustomRoles = onCall((request) => service.invokeRead(request, service.listCustomRoles))
 const updateCustomRole = trustedCallable(service.updateCustomRole, 'updateCustomRole')
 const disableCustomRole = trustedCallable(service.disableCustomRole, 'disableCustomRole')
 const enableCustomRole = trustedCallable(service.enableCustomRole, 'enableCustomRole')
@@ -15,6 +16,7 @@ const revokeCustomRole = trustedCallable(service.revokeCustomRole, 'revokeCustom
 
 module.exports = {
   createCustomRole,
+  listCustomRoles,
   updateCustomRole,
   disableCustomRole,
   enableCustomRole,

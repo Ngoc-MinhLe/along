@@ -1,5 +1,5 @@
 const { HttpsError } = require('firebase-functions/v2/https')
-const { Timestamp } = require('firebase-admin/firestore')
+const { FieldPath, Timestamp } = require('firebase-admin/firestore')
 const { adminAuth, adminDb } = require('./admin')
 const {
   PERMISSIONS,
@@ -21,6 +21,8 @@ const { invokeAudited } = require('./audit')
 
 const ROLE_ID_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/
 const FORBIDDEN_CUSTOM_PERMISSION_SET = new Set(CUSTOM_ROLE_FORBIDDEN_PERMISSIONS)
+const DEFAULT_LIST_LIMIT = 25
+const MAX_LIST_LIMIT = 50
 
 function invalidArgument(message) {
   throw new HttpsError('invalid-argument', message)
@@ -32,6 +34,38 @@ function notFound(message) {
 
 function failedPrecondition(message) {
   throw new HttpsError('failed-precondition', message)
+}
+
+function encodeRoleCursor(value) {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
+}
+
+function decodeRoleCursor(value) {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value !== 'string' || value.length > 2048) invalidArgument('cursor is invalid.')
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    const validUpdatedAt = decoded && typeof decoded.id === 'string' && decoded.id && Number.isFinite(decoded.updatedAt)
+    const validName = decoded && typeof decoded.id === 'string' && decoded.id && typeof decoded.name === 'string'
+    if (!validUpdatedAt && !validName) invalidArgument('cursor is invalid.')
+    return decoded
+  } catch {
+    invalidArgument('cursor is invalid.')
+  }
+}
+
+function normalizeRoleListPayload(data) {
+  assertObject(data || {})
+  const allowed = ['pageSize', 'cursor', 'status', 'query']
+  const unsupported = Object.keys(data || {}).find((key) => !allowed.includes(key))
+  if (unsupported) invalidArgument(`Unsupported request field: ${unsupported}.`)
+  const pageSize = data?.pageSize === undefined ? DEFAULT_LIST_LIMIT : data.pageSize
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_LIST_LIMIT) invalidArgument(`pageSize must be an integer from 1 to ${MAX_LIST_LIMIT}.`)
+  const status = data?.status === undefined || data.status === '' ? null : data.status
+  if (status !== null && !['active', 'disabled'].includes(status)) invalidArgument('status is invalid.')
+  const query = data?.query === undefined ? '' : data.query
+  if (typeof query !== 'string' || query.trim().length > 120) invalidArgument('query must be a string with at most 120 characters.')
+  return { pageSize, cursor: decodeRoleCursor(data?.cursor), status, query: query.trim() }
 }
 
 function normalizeCustomRoleIds(value) {
@@ -315,6 +349,34 @@ async function createCustomRole(actor, data, db = adminDb) {
   return { ok: true, operation: 'createCustomRole', roleId }
 }
 
+async function listCustomRoles(actor, data, db = adminDb) {
+  requirePermission(actor, 'roles.read')
+  const payload = normalizeRoleListPayload(data)
+  let roleQuery = db.collection('roles').where('type', '==', 'CUSTOM')
+  if (payload.status) roleQuery = roleQuery.where('status', '==', payload.status)
+  if (payload.query) {
+    roleQuery = roleQuery.orderBy('name').orderBy(FieldPath.documentId())
+    if (payload.cursor?.name !== undefined) roleQuery = roleQuery.startAfter(payload.cursor.name, payload.cursor.id)
+    else roleQuery = roleQuery.startAt(payload.query)
+    roleQuery = roleQuery.endAt(`${payload.query}\uf8ff`)
+  } else {
+    roleQuery = roleQuery.orderBy('updatedAt', 'desc').orderBy(FieldPath.documentId(), 'desc')
+    if (payload.cursor) roleQuery = roleQuery.startAfter(Timestamp.fromMillis(payload.cursor.updatedAt), payload.cursor.id)
+  }
+  const snapshot = await roleQuery.limit(payload.pageSize + 1).get()
+  const documents = snapshot.docs.slice(0, payload.pageSize)
+  const items = documents.map((item) => {
+    try {
+      const role = roleFromSnapshot(item.id, item)
+      return { id: role.id, name: role.name, description: role.description || '', type: role.type, status: role.status, permissions: role.permissions || [], createdBy: role.createdBy || null, createdAt: role.createdAt || null, updatedAt: role.updatedAt || null }
+    } catch {
+      return null
+    }
+  }).filter(Boolean)
+  const last = documents.at(-1)
+  return { ok: true, items, hasMore: snapshot.docs.length > payload.pageSize, pageSize: payload.pageSize, nextCursor: last ? encodeRoleCursor(payload.query ? { name: last.data()?.name || '', id: last.id } : { updatedAt: last.data()?.updatedAt?.toMillis?.() || 0, id: last.id }) : null }
+}
+
 async function updateCustomRole(actor, data, db = adminDb) {
   const payload = normalizeRolePayload(data, { includeRoleId: true })
   requirePermission(actor, 'roles.update')
@@ -447,6 +509,11 @@ async function invokeTrusted(request, handler, operation) {
   return invokeAudited(request, handler, operation)
 }
 
+async function invokeRead(request, handler) {
+  const actor = await getTrustedActor(request)
+  return handler(actor, request?.data || {})
+}
+
 module.exports = {
   buildAuthorizationData,
   planAuthorization,
@@ -456,6 +523,7 @@ module.exports = {
   readProfile,
   readUserAuthorization,
   createCustomRole,
+  listCustomRoles,
   updateCustomRole,
   disableCustomRole: (actor, data, db) => setCustomRoleStatus(actor, data, 'disabled', 'disableCustomRole', db),
   enableCustomRole: (actor, data, db) => setCustomRoleStatus(actor, data, 'active', 'enableCustomRole', db),
@@ -463,4 +531,5 @@ module.exports = {
   assignCustomRole: (actor, data, db) => mutateAssignment(actor, data, 'assignCustomRole', db),
   revokeCustomRole: (actor, data, db) => mutateAssignment(actor, data, 'revokeCustomRole', db),
   invokeTrusted,
+  invokeRead,
 }
