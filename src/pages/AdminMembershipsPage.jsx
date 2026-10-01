@@ -23,6 +23,10 @@ function emptyDateValue() {
   return date.toISOString().slice(0, 16)
 }
 
+function membershipStatusLabel(status) {
+  return { ACTIVE: 'Đang hiệu lực', REVOKED: 'Đã thu hồi', EXPIRED: 'Đã hết hạn' }[status] || status
+}
+
 export default function AdminMembershipsPage() {
   const { hasPermission } = usePermissions()
   const canAssign = hasPermission(PERMISSIONS.MEMBERSHIP_ASSIGN)
@@ -87,10 +91,10 @@ export default function AdminMembershipsPage() {
 
   async function handleCreate(event) {
     event.preventDefault()
-    if (!canAssign) return setError(`Bạn không có quyền ${PERMISSIONS.MEMBERSHIP_ASSIGN}.`)
+    if (!canAssign) return setError('Bạn không có quyền cấp Membership.')
     const startsAt = toIso(form.startsAt)
     const expiresAt = toIso(form.expiresAt)
-    if (!form.userId || !form.tierId || !startsAt) return setError('Vui lòng chọn User, tier và ngày bắt đầu hợp lệ.')
+    if (!form.userId || !form.tierId || !startsAt) return setError('Vui lòng chọn tài khoản, Membership và ngày bắt đầu hợp lệ.')
     if (form.expiresAt && !expiresAt) return setError('Ngày hết hạn không hợp lệ.')
     setBusy(true)
     setError('')
@@ -127,33 +131,34 @@ export default function AdminMembershipsPage() {
 
   return <section className="admin-memberships-page">
     <div className="admin-card">
-      <div className="admin-section-heading"><div><h3>Membership</h3><p>Quản lý tier động và trạng thái Membership theo policy trusted backend.</p></div><span className="admin-readonly">{memberships.length}{hasMore ? '+' : ''} bản ghi</span></div>
+      <div className="admin-section-heading"><div><h3>Quản lý Membership</h3><p>Cấp, theo dõi và thu hồi quyền lợi Membership qua backend tin cậy. Đây không phải là System Role.</p></div><span className="admin-readonly">{memberships.length}{hasMore ? '+' : ''} bản ghi</span></div>
       {error && <p className="admin-error" role="alert">{error}</p>}
       {message && <p className="admin-success" role="status">{message}</p>}
-      <p className="admin-muted">Danh sách này bị giới hạn {PAGE_LIMIT} bản ghi mỗi lần tải; không tải toàn bộ collection về trình duyệt.</p>
+      <p className="admin-muted">Danh sách hiển thị tối đa {PAGE_LIMIT} bản ghi mỗi lần tải; không tải toàn bộ dữ liệu về trình duyệt.</p>
     </div>
 
     {canAssign && <form className="admin-card membership-form" onSubmit={handleCreate}>
       <h3>Cấp Membership thủ công</h3>
-      <p className="admin-muted">Chỉ chọn tier đang active. Mỗi user chỉ có tối đa một Membership ACTIVE.</p>
+      <p className="admin-muted">Chọn tài khoản, cấp Membership và thời gian hiệu lực. Mỗi tài khoản chỉ có tối đa một Membership đang hiệu lực.</p>
       <div className="membership-form-grid">
-        <label>User<select value={form.userId} onChange={(event) => setForm({ ...form, userId: event.target.value })} disabled={busy}><option value="">Chọn User</option>{users.filter((user) => (user.status || 'active') === 'active').map((user) => <option key={user.id} value={user.id}>{user.displayName || user.email || user.id} — {user.email || user.id}</option>)}</select></label>
-        <label>VIP tier<select value={form.tierId} onChange={(event) => setForm({ ...form, tierId: event.target.value })} disabled={busy}><option value="">Chọn tier</option>{tiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · level {tier.level}</option>)}</select></label>
-        <label>Bắt đầu<input type="datetime-local" value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} disabled={busy} /></label>
-        <label>Hết hạn <span className="membership-optional">(tùy chọn)</span><input type="datetime-local" value={form.expiresAt} onChange={(event) => setForm({ ...form, expiresAt: event.target.value })} disabled={busy} /></label>
+        <label>Tài khoản nhận Membership<select value={form.userId} onChange={(event) => setForm({ ...form, userId: event.target.value })} disabled={busy}><option value="">Chọn tài khoản</option>{users.filter((user) => (user.status || 'active') === 'active').map((user) => <option key={user.id} value={user.id}>{user.displayName || user.email || user.id} — {user.email || user.id}</option>)}</select><small className="admin-field-help">Tài khoản đang được cấp Membership.</small></label>
+        <label>Membership<select value={form.tierId} onChange={(event) => setForm({ ...form, tierId: event.target.value })} disabled={busy}><option value="">Chọn Membership</option>{tiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · cấp {tier.level}</option>)}</select><small className="admin-field-help">Chỉ chọn Membership đang hoạt động; cấp độ do hệ thống dùng để xác định quyền lợi.</small></label>
+        <label>Bắt đầu hiệu lực<input type="datetime-local" value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} disabled={busy} /><small className="admin-field-help">Thời điểm tài khoản bắt đầu được hưởng Membership.</small></label>
+        <label>Kết thúc hiệu lực <span className="membership-optional">(tùy chọn)</span><input type="datetime-local" value={form.expiresAt} onChange={(event) => setForm({ ...form, expiresAt: event.target.value })} disabled={busy} /><small className="admin-field-help">Để trống nếu Membership không có ngày hết hạn.</small></label>
       </div>
       <button type="submit" className="admin-primary-button" disabled={busy || !tiers.length}>{busy ? 'Đang xử lý…' : 'Cấp Membership'}</button>
     </form>}
 
     <div className="admin-card membership-table-card">
-      <div className="admin-section-heading"><div><h3>Danh sách Membership</h3><p>Tier, level và quyền đọc được lấy từ dữ liệu Membership/Tier ở backend.</p></div></div>
-      {loading ? <p className="admin-muted">Đang tải Membership…</p> : !memberships.length ? <p className="admin-muted">Chưa có Membership.</p> : <div className="membership-table-scroll"><table className="membership-table"><thead><tr><th>User</th><th>Tier</th><th>Status</th><th>Bắt đầu</th><th>Hết hạn</th><th>Source</th><th>Assigned by</th><th>Thao tác</th></tr></thead><tbody>{memberships.map((membership) => <tr key={membership.membershipId}><td><strong>{membership.user?.displayName || userMap[membership.userId]?.displayName || membership.userId}</strong><small>{membership.user?.email || userMap[membership.userId]?.email || membership.userId}</small></td><td>{membership.tier?.name || tierMap[membership.tierId]?.name || membership.tierId}<small>Level {membership.tier?.level ?? tierMap[membership.tierId]?.level ?? '—'}</small></td><td><span className={`membership-status ${membership.status}`}>{membership.status}</span></td><td>{formatDate(membership.startsAt)}</td><td>{formatDate(membership.expiresAt)}</td><td>{membership.source || '—'}</td><td>{membership.assignedBy || '—'}</td><td>{canRevoke && membership.status === 'ACTIVE' ? <button type="button" className="admin-danger-button" onClick={() => handleRevoke(membership)} disabled={busy}>Thu hồi</button> : <span className="admin-muted">—</span>}</td></tr>)}</tbody></table></div>}
+      <div className="admin-section-heading"><div><h3>Danh sách Membership đã cấp</h3><p>Cấp độ được lấy từ dữ liệu Membership tương ứng ở backend.</p></div></div>
+      {loading ? <p className="admin-muted">Đang tải Membership…</p> : !memberships.length ? <p className="admin-muted">Chưa có Membership.</p> : <div className="membership-table-scroll"><table className="membership-table"><thead><tr><th>Tài khoản</th><th>Membership</th><th>Trạng thái</th><th>Bắt đầu</th><th>Kết thúc</th><th>Nguồn cấp</th><th>Người cấp</th><th>Thao tác</th></tr></thead><tbody>{memberships.map((membership) => <tr key={membership.membershipId}><td><strong>{membership.user?.displayName || userMap[membership.userId]?.displayName || membership.userId}</strong><small>{membership.user?.email || userMap[membership.userId]?.email || membership.userId}</small></td><td>{membership.tier?.name || tierMap[membership.tierId]?.name || membership.tierId}<small>Cấp {membership.tier?.level ?? tierMap[membership.tierId]?.level ?? '—'}</small></td><td><span className={`membership-status ${membership.status}`}>{membershipStatusLabel(membership.status)}</span></td><td>{formatDate(membership.startsAt)}</td><td>{formatDate(membership.expiresAt)}</td><td>{membership.source || '—'}</td><td>{membership.assignedBy || '—'}</td><td>{canRevoke && membership.status === 'ACTIVE' ? <button type="button" className="admin-danger-button" onClick={() => handleRevoke(membership)} disabled={busy}>Thu hồi</button> : <span className="admin-muted">—</span>}</td></tr>)}</tbody></table></div>}
     </div>
 
     <div className="admin-card membership-history-card">
-      <h3>Lịch sử theo User</h3>
-      <select value={selectedUserId} onChange={(event) => selectUser(event.target.value)} disabled={historyLoading} aria-label="Chọn user xem lịch sử"><option value="">Chọn User</option>{users.map((user) => <option key={user.id} value={user.id}>{user.displayName || user.email || user.id}</option>)}</select>
-      {historyLoading ? <p className="admin-muted">Đang tải lịch sử…</p> : selectedUserId && !selectedHistory.length ? <p className="admin-muted">User này chưa có Membership.</p> : selectedHistory.map((membership) => <div className="membership-history-row" key={membership.membershipId}><strong>{membership.tier?.name || membership.tierId}</strong><span>{membership.status} · {formatDate(membership.startsAt)} → {formatDate(membership.expiresAt)}</span></div>)}
+      <h3>Lịch sử Membership theo tài khoản</h3>
+      <p className="admin-muted">Chọn tài khoản để xem cả Membership đang hiệu lực và các Membership đã thu hồi hoặc hết hạn.</p>
+      <label>Tài khoản cần xem lịch sử<select value={selectedUserId} onChange={(event) => selectUser(event.target.value)} disabled={historyLoading} aria-label="Chọn tài khoản xem lịch sử"><option value="">Chọn tài khoản</option>{users.map((user) => <option key={user.id} value={user.id}>{user.displayName || user.email || user.id}</option>)}</select></label>
+      {historyLoading ? <p className="admin-muted">Đang tải lịch sử…</p> : selectedUserId && !selectedHistory.length ? <p className="admin-muted">Tài khoản này chưa có Membership.</p> : selectedHistory.map((membership) => <div className="membership-history-row" key={membership.membershipId}><strong>{membership.tier?.name || membership.tierId}</strong><span>{membershipStatusLabel(membership.status)} · {formatDate(membership.startsAt)} → {formatDate(membership.expiresAt)}</span></div>)}
     </div>
   </section>
 }

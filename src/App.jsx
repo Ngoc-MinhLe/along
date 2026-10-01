@@ -43,7 +43,7 @@ export default function App() {
           <Route path="roles" element={<PermissionGate permission={PERMISSIONS.ROLES_READ}><AdminRolesPage /></PermissionGate>} />
           <Route path="permissions" element={<PermissionGate permission={PERMISSIONS.ROLES_READ}><AdminPermissionsPage /></PermissionGate>} />
           <Route path="memberships" element={<PermissionGate permission={PERMISSIONS.MEMBERSHIP_READ}><AdminMembershipsPage /></PermissionGate>} />
-          <Route path="membership-tiers" element={<PermissionGate permission={PERMISSIONS.MEMBERSHIP_READ}><AdminMembershipTiersPage /></PermissionGate>} />
+          <Route path="membership-tiers" element={<PermissionGate permission={PERMISSIONS.MEMBERSHIP_UPDATE}><AdminMembershipTiersPage /></PermissionGate>} />
           <Route path="news" element={<PermissionGate any={NEWS_MANAGEMENT_PERMISSIONS}><NewsManagementPage /></PermissionGate>} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />

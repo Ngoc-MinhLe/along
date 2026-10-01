@@ -5,6 +5,7 @@ const {
   getTrustedActor,
   hasPermission,
 } = require('./authorization')
+const { resolveEffectiveMembership } = require('./membership-service')
 
 const ACCESS_MODES = Object.freeze({ PUBLIC: 'PUBLIC', VIP: 'VIP', SPECIAL: 'SPECIAL' })
 const MAX_LIST_LIMIT = 50
@@ -94,7 +95,7 @@ function normalizeAccessPolicy(policy) {
   const mode = policy.mode
   if (!Object.values(ACCESS_MODES).includes(mode)) return null
   if (mode === ACCESS_MODES.VIP) {
-    if (!Number.isInteger(policy.minVipLevel) || policy.minVipLevel < 1 || policy.minVipLevel > 3) return null
+    if (!Number.isSafeInteger(policy.minVipLevel) || policy.minVipLevel < 1) return null
     return { mode, minVipLevel: policy.minVipLevel }
   }
   return { mode, minVipLevel: null }
@@ -127,6 +128,17 @@ async function readEntitlement(uid, db) {
   if (!entitlement || entitlement.uid !== uid || !Number.isInteger(entitlement.newsLevel)
     || entitlement.newsLevel < 0 || entitlement.newsLevel > 3) return null
   return isWithinEntitlementWindow(entitlement) ? entitlement : null
+}
+
+async function readCanonicalMembershipLevel(uid, db) {
+  try {
+    const resolved = await resolveEffectiveMembership(uid, db)
+    return resolved?.level ?? null
+  } catch (error) {
+    // Malformed membership data or an invariant violation must fail closed for
+    // News reads and must not expose protected article existence.
+    return null
+  }
 }
 
 async function hasAclAccess(uid, aclPath, db) {
@@ -162,6 +174,11 @@ async function canReadArticle(actor, article, policyResult, db) {
   if (!actor || !hasPermission(actor, 'news.read')) return false
 
   if (policy.mode === ACCESS_MODES.VIP) {
+    const membershipLevel = await readCanonicalMembershipLevel(actor.uid, db)
+    if (membershipLevel !== null && membershipLevel >= policy.minVipLevel) return true
+
+    // Legacy contentEntitlements remains a compatibility fallback while
+    // canonical Membership data becomes the primary VIP source.
     const entitlement = await readEntitlement(actor.uid, db)
     return Boolean(entitlement && entitlement.newsLevel >= policy.minVipLevel)
   }

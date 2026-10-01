@@ -43,6 +43,10 @@ async function createAccount(uid, permissions = [], systemRole = 'USER') {
   })
 }
 
+function membership(userId, tierId, status = 'ACTIVE', startsAt = now, expiresAt = null) {
+  return { userId, tierId, status, source: 'MANUAL', startsAt, expiresAt, createdAt: now }
+}
+
 async function signIn(uid) {
   const response = await fetch(`${AUTH_EMULATOR_URL}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key`, {
     method: 'POST',
@@ -110,6 +114,14 @@ function article(id, accessPolicy, extra = {}) {
 async function main() {
   await createAccount('news-vip1', ['news.read'])
   await createAccount('news-vip3', ['news.read'])
+  await createAccount('news-membership-level1', ['news.read'])
+  await createAccount('news-membership-level2', ['news.read'])
+  await createAccount('news-membership-partner', ['news.read'])
+  await createAccount('news-membership-level10', ['news.read'])
+  await createAccount('news-membership-expired', ['news.read'])
+  await createAccount('news-membership-revoked', ['news.read'])
+  await createAccount('news-membership-future', ['news.read'])
+  await createAccount('news-membership-inactive', ['news.read'])
   await createAccount('news-special-user', ['news.read'])
   await createAccount('news-special-group', ['news.read'])
   await createAccount('news-no-read')
@@ -144,6 +156,8 @@ async function main() {
   await db.doc('newsArticles/VIP1_ARTICLE').set(article('VIP1_ARTICLE', { mode: 'VIP', minVipLevel: 1 }))
   await db.doc('newsArticles/VIP2_ARTICLE').set(article('VIP2_ARTICLE', { mode: 'VIP', minVipLevel: 2 }))
   await db.doc('newsArticles/VIP3_ARTICLE').set(article('VIP3_ARTICLE', { mode: 'VIP', minVipLevel: 3 }))
+  await db.doc('newsArticles/VIP10_ARTICLE').set(article('VIP10_ARTICLE', { mode: 'VIP', minVipLevel: 10 }))
+  await db.doc('newsArticles/VIP11_ARTICLE').set(article('VIP11_ARTICLE', { mode: 'VIP', minVipLevel: 11 }))
   await db.doc('newsArticles/SPECIAL_USER_ARTICLE').set(article('SPECIAL_USER_ARTICLE', { mode: 'SPECIAL' }))
   await db.doc('newsArticles/SPECIAL_GROUP_ARTICLE').set(article('SPECIAL_GROUP_ARTICLE', { mode: 'INHERIT', inheritCategory: true }, { categoryId: 'SPECIAL_CATEGORY' }))
   await db.doc('newsArticles/DRAFT_ARTICLE').set(article('DRAFT_ARTICLE', { mode: 'PUBLIC' }, { status: 'draft' }))
@@ -159,8 +173,45 @@ async function main() {
     uid: 'news-special-group', status: 'active', addedAt: now,
   })
 
+  await db.doc('membershipTiers/VIP_LEVEL_1').set({
+    tierId: 'VIP_LEVEL_1', name: 'VIP Level 1', level: 1, status: 'active', createdAt: now,
+  })
+  await db.doc('membershipTiers/VIP_LEVEL_2').set({
+    tierId: 'VIP_LEVEL_2', name: 'VIP Level 2', level: 2, status: 'active', createdAt: now,
+  })
+  await db.doc('membershipTiers/PARTNER_LEVEL_2').set({
+    tierId: 'PARTNER_LEVEL_2', name: 'Partner Level 2', level: 2, status: 'active', createdAt: now,
+  })
+  await db.doc('membershipTiers/VIP_LEVEL_10').set({
+    tierId: 'VIP_LEVEL_10', name: 'VIP Level 10', level: 10, status: 'active', createdAt: now,
+  })
+  await db.doc('membershipTiers/INACTIVE_LEVEL_10').set({
+    tierId: 'INACTIVE_LEVEL_10', name: 'Inactive Level 10', level: 10, status: 'inactive', createdAt: now,
+  })
+  await db.doc('memberships/membership-level1').set(membership('news-membership-level1', 'VIP_LEVEL_1'))
+  await db.doc('memberships/membership-level2').set(membership('news-membership-level2', 'VIP_LEVEL_2'))
+  await db.doc('memberships/membership-partner').set(membership('news-membership-partner', 'PARTNER_LEVEL_2'))
+  await db.doc('memberships/membership-level10').set(membership('news-membership-level10', 'VIP_LEVEL_10'))
+  await db.doc('memberships/membership-expired').set(membership(
+    'news-membership-expired', 'VIP_LEVEL_2', 'ACTIVE',
+    Timestamp.fromMillis(now.toMillis() - 120_000), Timestamp.fromMillis(now.toMillis() - 60_000),
+  ))
+  await db.doc('memberships/membership-revoked').set(membership('news-membership-revoked', 'VIP_LEVEL_2', 'REVOKED'))
+  await db.doc('memberships/membership-future').set(membership(
+    'news-membership-future', 'VIP_LEVEL_2', 'ACTIVE', Timestamp.fromMillis(now.toMillis() + 60_000), null,
+  ))
+  await db.doc('memberships/membership-inactive').set(membership('news-membership-inactive', 'INACTIVE_LEVEL_10'))
+
   const vip1Token = await signIn('news-vip1')
   const vip3Token = await signIn('news-vip3')
+  const membershipLevel1Token = await signIn('news-membership-level1')
+  const membershipLevel2Token = await signIn('news-membership-level2')
+  const membershipPartnerToken = await signIn('news-membership-partner')
+  const membershipLevel10Token = await signIn('news-membership-level10')
+  const membershipExpiredToken = await signIn('news-membership-expired')
+  const membershipRevokedToken = await signIn('news-membership-revoked')
+  const membershipFutureToken = await signIn('news-membership-future')
+  const membershipInactiveToken = await signIn('news-membership-inactive')
   const specialUserToken = await signIn('news-special-user')
   const specialGroupToken = await signIn('news-special-group')
   const noReadToken = await signIn('news-no-read')
@@ -186,6 +237,19 @@ async function main() {
   await denied(() => call('getNewsArticle', vip1Token, { articleId: 'VIP2_ARTICLE' }), 'not-found')
   assert.equal((await call('getNewsArticle', vip3Token, { articleId: 'VIP3_ARTICLE' })).article.id, 'VIP3_ARTICLE')
   await denied(() => call('getNewsArticle', noReadToken, { articleId: 'VIP1_ARTICLE' }), 'not-found')
+  assert.equal((await call('getNewsArticle', membershipLevel1Token, { articleId: 'VIP1_ARTICLE' })).article.id, 'VIP1_ARTICLE')
+  await denied(() => call('getNewsArticle', membershipLevel1Token, { articleId: 'VIP2_ARTICLE' }), 'not-found')
+  assert.equal((await call('getNewsArticle', membershipLevel2Token, { articleId: 'VIP1_ARTICLE' })).article.id, 'VIP1_ARTICLE')
+  assert.equal((await call('getNewsArticle', membershipLevel2Token, { articleId: 'VIP2_ARTICLE' })).article.id, 'VIP2_ARTICLE')
+  await denied(() => call('getNewsArticle', membershipLevel2Token, { articleId: 'VIP3_ARTICLE' }), 'not-found')
+  assert.equal((await call('getNewsArticle', membershipPartnerToken, { articleId: 'VIP2_ARTICLE' })).article.id, 'VIP2_ARTICLE')
+  assert.equal((await call('getNewsArticle', membershipLevel10Token, { articleId: 'VIP10_ARTICLE' })).article.id, 'VIP10_ARTICLE')
+  await denied(() => call('getNewsArticle', membershipLevel10Token, { articleId: 'VIP11_ARTICLE' }), 'not-found')
+  await denied(() => call('getNewsArticle', membershipExpiredToken, { articleId: 'VIP2_ARTICLE' }), 'not-found')
+  await denied(() => call('getNewsArticle', membershipRevokedToken, { articleId: 'VIP2_ARTICLE' }), 'not-found')
+  await denied(() => call('getNewsArticle', membershipFutureToken, { articleId: 'VIP2_ARTICLE' }), 'not-found')
+  await denied(() => call('getNewsArticle', membershipInactiveToken, { articleId: 'VIP10_ARTICLE' }), 'not-found')
+  // A user without Membership still uses the valid legacy entitlement fallback.
   assert.equal((await call('getNewsArticle', noReadToken, { articleId: 'PUBLIC_ARTICLE' })).article.id, 'PUBLIC_ARTICLE')
   await db.doc('contentEntitlements/news-vip1').update({ uid: 'wrong-user' })
   await denied(() => call('getNewsArticle', vip1Token, { articleId: 'VIP1_ARTICLE' }), 'not-found')
@@ -238,9 +302,9 @@ async function main() {
   await denied(() => call('setNewsAccessPolicy', noReadToken, {
     articleId: 'PUBLIC_ARTICLE', accessPolicy: { mode: 'VIP', minVipLevel: 3 },
   }), 'permission-denied')
-  await denied(() => call('setNewsAccessPolicy', editorToken, {
+  await call('setNewsAccessPolicy', editorToken, {
     articleId: 'PUBLIC_ARTICLE', accessPolicy: { mode: 'VIP', minVipLevel: 4 },
-  }), 'invalid-argument')
+  })
   await call('setNewsAccessPolicy', editorToken, {
     articleId: created.articleId, accessPolicy: { mode: 'VIP', minVipLevel: 2 },
   })

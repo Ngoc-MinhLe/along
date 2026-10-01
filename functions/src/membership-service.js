@@ -268,7 +268,7 @@ async function resolveEffectiveMembership(userId, db = adminDb, now = Date.now()
   if (!membership) return null
   const tierSnapshot = await db.doc(`membershipTiers/${membership.tierId}`).get()
   const tier = tierSnapshot.exists ? normalizeTier(membership.tierId, tierSnapshot.data()) : null
-  if (!tier) return null
+  if (!tier || tier.status !== TIER_STATUSES.ACTIVE) return null
   return { membership, tier, level: tier.level }
 }
 

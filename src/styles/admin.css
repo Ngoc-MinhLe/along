@@ -202,3 +202,9 @@
 .membership-tier-table td code { font-size: 10px; }
 .membership-status.active { color: #287b5a; background: #e7f5eb; }
 .membership-status.inactive { color: #87651f; background: #fff8e8; }
+.admin-field-help { display: block; margin-top: 4px; color: #829690; font-size: 10px; font-weight: 400; line-height: 1.45; }
+.generated-membership-id { display: grid; align-content: center; gap: 6px; padding: 10px; border: 1px dashed #cadbd4; border-radius: 7px; color: #57746c; background: #eef7f3; font-size: 12px; font-weight: 600; }
+.generated-membership-id code { color: #17665b; font-size: 12px; word-break: break-all; }
+.generated-membership-id small { color: #829690; font-size: 10px; font-weight: 400; line-height: 1.45; }
+.membership-history-card > label { display: grid; gap: 6px; max-width: 440px; color: #57746c; font-size: 12px; font-weight: 600; }
+.membership-history-card > label select { width: 100%; padding: 9px 10px; border: 1px solid #cadbd4; border-radius: 7px; color: #315a52; background: #fff; font: inherit; font-size: 12px; }

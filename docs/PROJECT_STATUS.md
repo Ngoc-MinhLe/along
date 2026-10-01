@@ -1,5 +1,34 @@
 # PROJECT STATUS
 
+## Authoritative Current Snapshot - Phase 10.11U
+
+- Phase 10.10 remains **COMPLETED and CLOSED**.
+- Phase 10.11U - Membership <-> News Access Integration: **COMPLETED
+  locally; not deployed**.
+- The existing server-side News evaluator now resolves an effective active
+  Membership tier before applying the existing legacy entitlement fallback for
+  VIP reads.
+- VIP `minVipLevel` is validated as a positive safe integer with no artificial
+  maximum of 3. Membership tier level remains data-driven and is resolved from
+  `membershipTiers/{tierId}`; Membership documents still store only `tierId`.
+- Active, currently effective Memberships with active tiers grant access when
+  `tier.level >= article.accessPolicy.minVipLevel`. Expired, revoked, future,
+  inactive-tier, malformed or invariant-violating Membership data does not
+  grant access.
+- Valid `contentEntitlements/{uid}` remains a compatibility fallback when the
+  canonical Membership does not grant the requested level. Existing SPECIAL,
+  ACL, RBAC, `userAuthorizations`, Rules and direct-write restrictions remain
+  unchanged.
+- Local News, Membership/Tier, Functions, RBAC, authorization, frontend,
+  Rules and build regression tests passed. See
+  `docs/PHASE_10_11U_REPORT.md`.
+- Production data, production News behavior, deployments, commits and pushes
+  were not changed by Phase 10.11U.
+- Current phase: **Phase 10.11U - COMPLETED; checkpoint before deployment
+  review**.
+- Next checkpoint: review and explicitly approve the production deployment
+  scope for the News Functions that contain the Membership-aware evaluator.
+
 ## Authoritative Current Snapshot - Phase 10.11M ARCHITECTURE RECONCILIATION
 
 - Phase 10.10: **COMPLETED and CLOSED**.

@@ -10,11 +10,11 @@ import { assignCustomRole, rebuildProtectedSystemRoleAuthorizations, revokeCusto
 const PAGE_SIZE = 25
 const STATUS_OPTIONS = ['active', 'suspended', 'deletion_requested', 'deleted']
 const SORT_OPTIONS = [
-  ['name', 'Name'],
-  ['email', 'Email'],
-  ['createdAt', 'Created At'],
-  ['lastLoginAt', 'Last Login'],
-  ['systemRole', 'System Role'],
+    ['name', 'Tên'],
+    ['email', 'Email'],
+    ['createdAt', 'Ngày tạo'],
+    ['lastLoginAt', 'Lần đăng nhập gần nhất'],
+    ['systemRole', 'Vai trò nền tảng'],
 ]
 const ASSIGNABLE_SYSTEM_ROLES = Object.freeze(ROLE_HIERARCHY.filter((role) => role !== SYSTEM_ROLES.ROOT_ADMIN))
 
@@ -249,6 +249,7 @@ export default function AdminUsersPage() {
   }
 
   return <section className="admin-users-page">
+    <div className="admin-card admin-ux-note"><p><strong>Hướng dẫn:</strong> chọn một tài khoản để xem hồ sơ, vai trò và quyền hiệu lực. UID là mã tham chiếu kỹ thuật; các thay đổi quyền vẫn phải đi qua workflow được bảo vệ.</p></div>
     <div className="admin-card admin-users-toolbar">
       <div className="admin-section-heading"><div><h3>Người dùng</h3><p>Quản lý hồ sơ, Custom Role và Effective Permissions theo quyền được cấp.</p></div><span className="admin-readonly">{filteredUsers.length} users</span></div>
       <div className="user-list-filters">

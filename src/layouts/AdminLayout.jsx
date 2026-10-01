@@ -20,6 +20,7 @@ export default function AdminLayout() {
     PERMISSIONS.NEWS_DELETE,
     PERMISSIONS.NEWS_PUBLISH,
     PERMISSIONS.MEMBERSHIP_READ,
+    PERMISSIONS.MEMBERSHIP_UPDATE,
   ])
 
   if (loading || permissionsLoading) return <div className="admin-loading">Đang kiểm tra quyền truy cập…</div>
@@ -40,7 +41,7 @@ export default function AdminLayout() {
         {canReadRoles && <Link to="/admin/permissions">Danh mục quyền</Link>}
         {canManageNews && <Link to="/admin/news">Tin tức</Link>}
         {canReadMemberships && <Link to="/admin/memberships">Membership</Link>}
-        {canManageMembershipTiers && <Link to="/admin/membership-tiers">Quản lý tier</Link>}
+        {canManageMembershipTiers && <Link to="/admin/membership-tiers">Cấp Membership</Link>}
       </nav>
       <Outlet />
     </div>

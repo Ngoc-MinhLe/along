@@ -1237,3 +1237,18 @@ Status: **BLOCKED pending local ROOT ID token**.
 - Next checkpoint: configure the token locally, run dry-run, then rebuild only the three approved authorization documents.
 
 Detailed report: `docs/PHASE_10_10C_REPORT.md`.
+
+## Current authoritative checkpoint - Phase 10.11U
+
+- Phase 10.11U - Membership <-> News Access Integration: **COMPLETED
+  locally; not deployed**.
+- News VIP reads now use the canonical active Membership/tier level first and
+  retain valid `contentEntitlements/{uid}` as the legacy fallback.
+- VIP required levels are positive safe integers and are not capped at 3.
+- SPECIAL/ACL evaluation, RBAC, `userAuthorizations`, Firestore Rules and
+  direct-client-write restrictions were not changed.
+- The implementation and emulator/regression suite passed locally. Production
+  data and deployed code remain unchanged.
+- Next checkpoint: production-readiness review for the Membership-aware News
+  evaluator and an explicit deployment decision. Do not create production
+  tiers/memberships or change News data before that decision.

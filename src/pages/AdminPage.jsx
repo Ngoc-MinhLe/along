@@ -12,15 +12,15 @@ export default function AdminPage() {
 
   return (
     <section className="admin-dashboard">
-      <div className="admin-intro-card"><h3>RBAC foundation</h3><p>Các khu vực quản trị và thao tác được hiển thị theo effective permissions của tài khoản hiện tại.</p></div>
+      <div className="admin-intro-card"><h3>Tổng quan quản trị</h3><p>Các khu vực và thao tác bạn nhìn thấy phụ thuộc vào quyền hiệu lực của tài khoản hiện tại. Bạn không cần biết cấu trúc kỹ thuật phía sau để sử dụng các chức năng này.</p></div>
       <div className="admin-card-grid">
-        {canReadUsers && <Link className="admin-card" to="/admin/users"><strong>Người dùng</strong><span>Quản lý hồ sơ và Custom Role theo permission.</span></Link>}
-        {canReadRoles && <Link className="admin-card" to="/admin/roles"><strong>Vai trò</strong><span>Phân biệt System Role và Custom Role.</span></Link>}
-        {canReadRoles && <Link className="admin-card" to="/admin/permissions"><strong>Permission Catalog</strong><span>{Object.keys(PERMISSIONS).length} capability được định nghĩa.</span></Link>}
-        {canReadMemberships && <Link className="admin-card" to="/admin/memberships"><strong>Membership</strong><span>Quản lý tier động và lịch sử Membership theo policy.</span></Link>}
-        {canManageMembershipTiers && <Link className="admin-card" to="/admin/membership-tiers"><strong>Membership tiers</strong><span>Tạo, cập nhật và vô hiệu hóa tier bằng trusted backend.</span></Link>}
+        {canReadUsers && <Link className="admin-card" to="/admin/users"><strong>Người dùng</strong><span>Quản lý hồ sơ, vai trò và quyền được cấp cho từng tài khoản.</span></Link>}
+        {canReadRoles && <Link className="admin-card" to="/admin/roles"><strong>Vai trò</strong><span>Phân biệt vai trò nền tảng và vai trò nghiệp vụ tùy chỉnh.</span></Link>}
+        {canReadRoles && <Link className="admin-card" to="/admin/permissions"><strong>Danh mục quyền</strong><span>Tra cứu các thao tác hệ thống và ý nghĩa của từng quyền.</span></Link>}
+        {canReadMemberships && <Link className="admin-card" to="/admin/memberships"><strong>Membership</strong><span>Cấp, theo dõi và thu hồi quyền lợi Membership theo chính sách.</span></Link>}
+        {canManageMembershipTiers && <Link className="admin-card" to="/admin/membership-tiers"><strong>Cấp Membership</strong><span>Tạo và quản lý các cấp Membership động như VIP, Gold hoặc Platinum.</span></Link>}
       </div>
-      <div className="admin-card admin-role-list"><h3>System Roles</h3><div>{Object.values(SYSTEM_ROLES).map((role) => <span key={role}>{role}</span>)}</div></div>
+      <div className="admin-card admin-role-list"><h3>Vai trò nền tảng</h3><p>Đây là các vai trò cố định của hệ thống; không chỉnh sửa tại giao diện vai trò tùy chỉnh.</p><div>{Object.values(SYSTEM_ROLES).map((role) => <span key={role}>{role}</span>)}</div></div>
     </section>
   )
 }

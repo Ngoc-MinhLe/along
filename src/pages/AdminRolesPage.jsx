@@ -176,6 +176,7 @@ export default function AdminRolesPage() {
   }
 
   return <div className="admin-roles-page">
+    <div className="admin-card admin-ux-note"><p><strong>Hướng dẫn:</strong> System Role là vai trò nền tảng cố định. Custom Role là nhóm quyền nghiệp vụ được tạo theo nhu cầu; mã kỹ thuật chỉ dùng để hệ thống liên kết dữ liệu.</p></div>
     <section className="admin-card system-role-section">
       <div className="admin-section-heading"><div><h3>System Roles</h3><p>Hierarchy cố định. Tất cả System Role và permission tương ứng đều chỉ đọc.</p></div><span className="admin-readonly">READ ONLY</span></div>
       <div className="system-role-hierarchy">

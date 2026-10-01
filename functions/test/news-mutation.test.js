@@ -46,7 +46,12 @@ function rejects(operation, expectedMessage) {
     && (!expectedMessage || error.message.includes(expectedMessage)))
 }
 
-rejects(() => normalizeManagedAccessPolicy({ mode: 'VIP', minVipLevel: 4 }), 'accessPolicy')
+assert.deepEqual(normalizeManagedAccessPolicy({ mode: 'VIP', minVipLevel: 10 }), {
+  mode: 'VIP',
+  minVipLevel: 10,
+})
+rejects(() => normalizeManagedAccessPolicy({ mode: 'VIP', minVipLevel: 0 }), 'accessPolicy')
+rejects(() => normalizeManagedAccessPolicy({ mode: 'VIP', minVipLevel: Number.MAX_SAFE_INTEGER + 1 }), 'accessPolicy')
 rejects(() => normalizeManagedAccessPolicy({ mode: 'PUBLIC', actorUid: 'forged' }), 'Unsupported')
 rejects(() => normalizeArticleCreatePayload({
   title: 'Article', content: 'Content', accessPolicy: { mode: 'PUBLIC' }, status: 'published',
