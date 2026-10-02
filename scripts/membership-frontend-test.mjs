@@ -40,3 +40,5 @@ assert.doesNotMatch(tierPage, /VIP1|VIP2|VIP3/)
 assert.match(dashboard, /PERMISSIONS\.MEMBERSHIP_READ/)
 
 console.log('Frontend Membership test PASS: permission routes, dynamic tier IDs, callable-only mutations, bounded reads and UX explanations verified.')
+
+await import('./membership-selector-regression-test.mjs')

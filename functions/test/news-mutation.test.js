@@ -4,6 +4,8 @@ const {
   normalizeArticleCreatePayload,
   normalizeArticleUpdatePayload,
   normalizeCategoryCreatePayload,
+  normalizeCategoryUpdatePayload,
+  normalizeParentId,
   normalizeAclPayload,
 } = require('../src/news-mutation-service')
 
@@ -29,6 +31,8 @@ assert.equal(normalizeCategoryCreatePayload({
   name: 'VIP 1',
   defaultAccessPolicy: { mode: 'VIP', minVipLevel: 1 },
 }).slug, 'vip-1')
+assert.equal(normalizeParentId(null), null)
+assert.equal(normalizeCategoryUpdatePayload({ categoryId: 'CATEGORY_1', parentId: 'PARENT_1' }).fields.parentId, 'PARENT_1')
 assert.deepEqual(normalizeAclPayload({
   scope: 'ARTICLE',
   resourceId: 'ARTICLE_1',
@@ -59,5 +63,8 @@ rejects(() => normalizeArticleCreatePayload({
 rejects(() => normalizeAclPayload({
   scope: 'ARTICLE', resourceId: 'A', principalType: 'USER', principalId: 'A', effect: 'ALLOW',
 }), 'Unsupported')
+rejects(() => normalizeCategoryCreatePayload({
+  name: 'Child', parentId: 'bad/id', defaultAccessPolicy: { mode: 'PUBLIC' },
+}), 'parentId')
 
 console.log('News mutation unit test PASS: payload allowlists, access policy, slug, category and ACL validation verified.')

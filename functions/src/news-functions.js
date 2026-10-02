@@ -15,6 +15,7 @@ const getNewsArticle = trustedNewsReadCallable(service.getNewsArticle)
 const listNewsManagement = trustedNewsReadCallable(service.listNewsManagement)
 const getNewsManagementArticle = trustedNewsReadCallable(service.getNewsManagementArticle)
 const listNewsCategories = trustedNewsReadCallable(service.listNewsCategories)
+const listNewsCategoryTree = trustedNewsReadCallable(service.listNewsCategoryTree)
 const listNewsUsers = trustedNewsReadCallable(service.listNewsUsers)
 const listNewsGroups = trustedNewsReadCallable(service.listNewsGroups)
 const createNewsArticle = trustedNewsMutationCallable(mutationService.createNewsArticle, 'createNewsArticle')
@@ -36,6 +37,7 @@ module.exports = {
   listNewsManagement,
   getNewsManagementArticle,
   listNewsCategories,
+  listNewsCategoryTree,
   listNewsUsers,
   listNewsGroups,
   createNewsArticle,

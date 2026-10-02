@@ -6,17 +6,43 @@ function snapshot(id, data) {
   return { id, exists: true, data: () => data }
 }
 
-function makeDb(docs) {
+function makeDb(docs, calls = []) {
   const query = {
-    where() { return query },
-    orderBy() { return query },
-    startAt() { return query },
-    endAt() { return query },
-    startAfter() { return query },
-    limit() { return query },
+    where(...args) { calls.push({ type: 'where', args }); return query },
+    orderBy(...args) { calls.push({ type: 'orderBy', args }); return query },
+    startAt(...args) { calls.push({ type: 'startAt', args }); return query },
+    endAt(...args) { calls.push({ type: 'endAt', args }); return query },
+    startAfter(...args) { calls.push({ type: 'startAfter', args }); return query },
+    limit(...args) { calls.push({ type: 'limit', args }); return query },
     async get() { return { docs } },
   }
-  return { collection() { return query } }
+  return { collection() { return query }, calls }
+}
+
+function makeSearchDb(docs, calls = []) {
+  return {
+    collection() {
+      const state = { field: null, prefix: '' }
+      const query = {
+        where(...args) { calls.push({ type: 'where', args }); return query },
+        orderBy(...args) {
+          if (state.field === null) state.field = args[0]
+          calls.push({ type: 'orderBy', args })
+          return query
+        },
+        startAt(...args) { state.prefix = String(args[0]); calls.push({ type: 'startAt', args }); return query },
+        endAt(...args) { calls.push({ type: 'endAt', args }); return query },
+        startAfter(...args) { state.prefix = String(args[0]); calls.push({ type: 'startAfter', args }); return query },
+        limit(...args) { calls.push({ type: 'limit', args }); return query },
+        async get() {
+          const matching = docs.filter((item) => String(item.data()?.[state.field] || '').startsWith(state.prefix))
+          return { docs: matching }
+        },
+      }
+      return query
+    },
+    calls,
+  }
 }
 
 function actor(permissions = ['users.read']) {
@@ -41,6 +67,41 @@ assert.throws(() => normalizeUserListPayload({ cursor: 'forged' }), (error) => e
   assert.equal(typeof result.nextCursor, 'string')
   assert.equal(result.items[0].id, 'user-1')
   assert.equal(Object.prototype.hasOwnProperty.call(result.items[0], 'secret'), false)
+
+  const legacyDocs = [
+    snapshot('long-user', {
+      uid: 'long-user', email: 'vuch@example.test', displayName: 'Long Vũ', status: 'active', systemRole: 'USER',
+    }),
+    snapshot('minh-user', {
+      uid: 'minh-user', email: 'minh@example.test', displayName: 'minh le ngoc', status: 'active', systemRole: 'USER',
+    }),
+    snapshot('gmail-user', {
+      uid: 'gmail-user', email: 'gmail@example.test', displayName: 'Gmail User', status: 'active', systemRole: 'USER',
+    }),
+  ]
+  const expectedSearchIds = {
+    long: 'long-user', Long: 'long-user', LONG: 'long-user',
+    minh: 'minh-user', Minh: 'minh-user', MINH: 'minh-user', gmail: 'gmail-user',
+  }
+  for (const query of Object.keys(expectedSearchIds)) {
+    const calls = []
+    const searchDb = makeSearchDb(legacyDocs, calls)
+    const searchResult = await listUsers(actor(), { query, pageSize: 20 }, searchDb)
+    assert.ok(searchResult.items.length >= 1, `expected a bounded search result for ${query}`)
+    assert.ok(searchResult.items.some((item) => item.id === expectedSearchIds[query]), `expected the matching user for ${query}`)
+    assert.ok(calls.some((call) => call.type === 'orderBy' && call.args[0] === 'displayName'))
+    assert.ok(calls.some((call) => call.type === 'orderBy' && call.args[0] === 'email'))
+    assert.ok(calls.filter((call) => call.type === 'limit').every((call) => call.args[0] <= 50))
+  }
+
+  const cursorCalls = []
+  const cursorDb = makeDb(legacyDocs, cursorCalls)
+  const cursorPage = await listUsers(actor(), { query: 'long', pageSize: 1 }, cursorDb)
+  assert.equal(typeof cursorPage.nextCursor, 'string')
+  const decodedCursor = normalizeUserListPayload({ cursor: cursorPage.nextCursor }).cursor
+  assert.equal(decodedCursor.version, 2)
+  assert.ok(decodedCursor.streams.length >= 1)
+  assert.ok(cursorCalls.some((call) => call.type === 'startAt'))
 
   await assert.rejects(
     () => listUsers(actor([]), {}, makeDb([])),

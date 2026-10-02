@@ -1,5 +1,5 @@
 const { HttpsError } = require('firebase-functions/v2/https')
-const { FieldPath, Timestamp } = require('firebase-admin/firestore')
+const { FieldPath, Filter, Timestamp } = require('firebase-admin/firestore')
 const { adminAuth, adminDb } = require('./admin')
 const {
   getTrustedActor,
@@ -346,10 +346,19 @@ async function listMembershipTiers(actor, data, db = adminDb) {
     tierQuery = tierQuery.where('level', '==', numericQuery).orderBy(FieldPath.documentId())
     if (payload.cursor?.name === undefined && payload.cursor) tierQuery = tierQuery.startAfter(payload.cursor.id)
   } else if (payload.query) {
-    tierQuery = tierQuery.orderBy('name').orderBy(FieldPath.documentId())
+    // One bounded, ordered union: Firestore deduplicates overlapping prefixes and
+    // the document cursor applies to the whole result, not separate search streams.
+    const lower = payload.query.toLowerCase()
+    const prefixes = [...new Set([
+      payload.query, lower, lower.toUpperCase(),
+      lower.replace(/(^|\s)(\S)/gu, (_, space, letter) => space + letter.toUpperCase()),
+    ])]
+    tierQuery = tierQuery.where(Filter.or(...prefixes.map((prefix) => Filter.and(
+      Filter.where('name', '>=', prefix),
+      Filter.where('name', '<=', `${prefix}\uf8ff`),
+    )))).orderBy('name').orderBy(FieldPath.documentId())
     if (payload.cursor?.name !== undefined) tierQuery = tierQuery.startAfter(payload.cursor.name, payload.cursor.id)
-    else tierQuery = tierQuery.startAt(payload.query)
-    tierQuery = tierQuery.endAt(`${payload.query}\uf8ff`)
+    else if (payload.cursor) invalidArgument('cursor must match the tier name search.')
   } else {
     tierQuery = tierQuery.orderBy('level').orderBy(FieldPath.documentId())
     if (payload.cursor) tierQuery = tierQuery.startAfter(payload.cursor.level, payload.cursor.id)
@@ -576,6 +585,7 @@ module.exports = {
   normalizeTierCreatePayload,
   normalizeTierUpdatePayload,
   normalizeTierDeactivatePayload,
+  normalizeTierListPayload,
   normalizeMembership,
   normalizeCreatePayload,
   normalizeRevokePayload,

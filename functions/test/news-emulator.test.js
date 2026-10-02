@@ -370,6 +370,18 @@ async function main() {
   const specialCategory = await call('createNewsCategory', superToken, {
     name: 'Managed Special', defaultAccessPolicy: { mode: 'SPECIAL' },
   })
+  const childCategory = await call('createNewsCategory', superToken, {
+    name: 'Managed Child', parentId: specialCategory.categoryId, defaultAccessPolicy: { mode: 'SPECIAL' },
+  })
+  const grandchildCategory = await call('createNewsCategory', superToken, {
+    name: 'Managed Grandchild', parentId: childCategory.categoryId, defaultAccessPolicy: { mode: 'SPECIAL' },
+  })
+  const categoryTree = await call('listNewsCategoryTree', superToken, { query: 'GRANDCHILD', includeDisabled: true })
+  assert.deepEqual(categoryTree.items.map((item) => item.id).sort(), [childCategory.categoryId, grandchildCategory.categoryId, specialCategory.categoryId].sort())
+  await denied(() => call('updateNewsCategory', rootToken, {
+    categoryId: specialCategory.categoryId, parentId: grandchildCategory.categoryId,
+  }), 'failed-precondition')
+  await denied(() => call('deleteNewsCategory', adminToken, { categoryId: specialCategory.categoryId }), 'failed-precondition')
   const specialArticle = await call('createNewsArticle', editorToken, {
     title: 'Managed Special Article', content: 'Special content', categoryId: specialCategory.categoryId,
     accessPolicy: { mode: 'SPECIAL' },

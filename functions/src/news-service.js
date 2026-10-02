@@ -12,6 +12,7 @@ const ACCESS_MODES = Object.freeze({ PUBLIC: 'PUBLIC', VIP: 'VIP', SPECIAL: 'SPE
 const MAX_LIST_LIMIT = 50
 const MAX_SCAN_LIMIT = 100
 const MAX_SELECTOR_LIMIT = 50
+const MAX_CATEGORY_TREE_LIMIT = 1000
 
 function encodeCursor(value) {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
@@ -78,6 +79,32 @@ function normalizeSelectorPayload(data, allowedKeys = []) {
     invalidArgument(`limit must be an integer from 1 to ${MAX_SELECTOR_LIMIT}.`)
   }
   return { query: query?.trim() || '', limit, cursor: decodeCursor(data?.cursor) }
+}
+
+function normalizeCategorySearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .trim()
+}
+
+function normalizeStoredParentId(value) {
+  if (value === undefined || value === null || value === '') return null
+  return typeof value === 'string' && value.length <= 128 && !value.includes('/') ? value : null
+}
+
+function serializeCategory(snapshot) {
+  const data = snapshot.data() || {}
+  return {
+    id: snapshot.id,
+    name: typeof data.name === 'string' ? data.name : '',
+    slug: typeof data.slug === 'string' ? data.slug : '',
+    description: typeof data.description === 'string' ? data.description : '',
+    status: data.status,
+    parentId: normalizeStoredParentId(data.parentId),
+    defaultAccessPolicy: data.defaultAccessPolicy || null,
+  }
 }
 
 function normalizeManagementPayload(data) {
@@ -365,31 +392,78 @@ async function listNewsCategories(actor, data, db = adminDb) {
   const payload = normalizeSelectorPayload(data, ['includeDisabled'])
   const includeDisabled = data?.includeDisabled === true
   if (includeDisabled) requireAnyPermission(actor, ['news.create', 'news.update', 'news.delete'])
-  const queryText = payload.query.toLowerCase()
   let query = db.collection('newsCategories')
   if (!includeDisabled) query = query.where('status', '==', 'active')
   query = query.orderBy('name').orderBy(FieldPath.documentId())
   if (payload.query) {
-    if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
-    else query = query.startAt(payload.query)
-    query = query.endAt(`${payload.query}\uf8ff`)
-  } else if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
+    // Firestore prefix matching is case-sensitive. A bounded catalog read lets
+    // legacy categories (which have no normalized search field) participate in
+    // case/diacritic-insensitive selector search without a client-side scan.
+    const snapshot = await query.limit(MAX_CATEGORY_TREE_LIMIT).get()
+    const queryText = normalizeCategorySearchText(payload.query)
+    const filtered = snapshot.docs
+      .map(serializeCategory)
+      .filter((item) => (includeDisabled || item.status === 'active')
+        && normalizeCategorySearchText(`${item.name} ${item.slug} ${item.description}`).includes(queryText))
+    const cursorIndex = payload.cursor
+      ? filtered.findIndex((item) => item.id === payload.cursor.id)
+      : -1
+    const startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0
+    const items = filtered.slice(startIndex, startIndex + payload.limit)
+    const last = items.at(-1)
+    return {
+      ok: true,
+      items,
+      hasMore: startIndex + items.length < filtered.length,
+      nextCursor: last ? encodeCursor({ field: 'name', value: last.name, id: last.id }) : null,
+    }
+  }
+  if (payload.cursor) query = query.startAfter(payload.cursor.value, payload.cursor.id)
   const snapshot = await query.limit(payload.limit).get()
-  const items = snapshot.docs
-    .map((item) => {
-      const data = item.data()
-      return {
-        id: item.id,
-        name: typeof data.name === 'string' ? data.name : '',
-        description: typeof data.description === 'string' ? data.description : '',
-        status: data.status,
-        defaultAccessPolicy: data.defaultAccessPolicy || null,
-      }
-    })
-    .filter((item) => (includeDisabled || item.status === 'active')
-      && (!queryText || `${item.name} ${item.description}`.toLowerCase().includes(queryText)))
+  const items = snapshot.docs.map(serializeCategory).filter((item) => includeDisabled || item.status === 'active')
   const last = snapshot.docs.at(-1)
   return { ok: true, items, hasMore: snapshot.docs.length === payload.limit, nextCursor: last ? encodeCursor({ field: 'name', value: String(last.data()?.name || ''), id: last.id }) : null }
+}
+
+async function listNewsCategoryTree(actor, data, db = adminDb) {
+  assertAllowedKeys(data || {}, ['query', 'includeDisabled', 'limit'])
+  const query = typeof data?.query === 'string' ? data.query.trim() : ''
+  if (query.length > 120) invalidArgument('query must be a string with at most 120 characters.')
+  const includeDisabled = data?.includeDisabled !== false
+  requireAnyPermission(actor, ['news.create', 'news.update', 'news.delete'])
+  const requestedLimit = data?.limit === undefined ? MAX_CATEGORY_TREE_LIMIT : data.limit
+  if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > MAX_CATEGORY_TREE_LIMIT) {
+    invalidArgument(`limit must be an integer from 1 to ${MAX_CATEGORY_TREE_LIMIT}.`)
+  }
+
+  let queryRef = db.collection('newsCategories').orderBy('name').orderBy(FieldPath.documentId())
+  if (!includeDisabled) queryRef = queryRef.where('status', '==', 'active')
+  const snapshot = await queryRef.limit(requestedLimit).get()
+  const allItems = snapshot.docs
+    .map(serializeCategory)
+    .filter((item) => includeDisabled || item.status === 'active')
+  if (!query) {
+    return { ok: true, items: allItems, hasMore: snapshot.docs.length === requestedLimit, nextCursor: null }
+  }
+
+  const queryText = normalizeCategorySearchText(query)
+  const matches = new Set(allItems
+    .filter((item) => normalizeCategorySearchText(`${item.name} ${item.slug} ${item.description}`).includes(queryText))
+    .map((item) => item.id))
+  const byId = new Map(allItems.map((item) => [item.id, item]))
+  const contextIds = new Set(matches)
+  for (const matchId of matches) {
+    let parentId = byId.get(matchId)?.parentId
+    const seen = new Set([matchId])
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId)
+      if (!byId.has(parentId)) break
+      contextIds.add(parentId)
+      parentId = byId.get(parentId)?.parentId
+    }
+  }
+  const items = allItems.filter((item) => contextIds.has(item.id))
+  return { ok: true, items, hasMore: snapshot.docs.length === requestedLimit, nextCursor: null }
 }
 
 async function listNewsUsers(actor, data, db = adminDb) {
@@ -459,6 +533,7 @@ module.exports = {
   listNewsManagement,
   getNewsManagementArticle,
   listNewsCategories,
+  listNewsCategoryTree,
   listNewsUsers,
   listNewsGroups,
   invokeNews,

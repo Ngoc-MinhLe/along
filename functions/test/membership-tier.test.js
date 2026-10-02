@@ -5,6 +5,7 @@ const {
   normalizeTierCreatePayload,
   normalizeTierUpdatePayload,
   normalizeTierDeactivatePayload,
+  normalizeTierListPayload,
 } = require('../src/membership-service')
 
 function throwsCode(callback, code) {
@@ -31,5 +32,15 @@ throwsCode(() => normalizeTierCreatePayload({ tierId: 'VIP 10', name: 'VIP', lev
 throwsCode(() => normalizeTierCreatePayload({ tierId: 'vip', name: 'VIP', level: 0 }), 'invalid-argument')
 throwsCode(() => normalizeTierCreatePayload({ tierId: 'vip', name: 'VIP', level: 1, status: 'active' }), 'invalid-argument')
 throwsCode(() => normalizeTierUpdatePayload({ tierId: 'vip', name: 'VIP', level: Number.MAX_SAFE_INTEGER + 1 }), 'invalid-argument')
+
+for (const query of ['vip', 'VIP', 'gold', 'platinum']) {
+  assert.deepEqual(normalizeTierListPayload({ includeInactive: false, limit: 20, query }), {
+    includeInactive: false, limit: 20, query, cursor: null,
+  })
+}
+for (const field of ['actorUid', 'role', 'permissions', 'level']) {
+  throwsCode(() => normalizeTierListPayload({ query: 'vip', [field]: 'forged' }), 'invalid-argument')
+}
+throwsCode(() => normalizeTierListPayload({ query: {} }), 'invalid-argument')
 
 console.log('Membership tier unit test PASS: dynamic schema, immutable ID boundary, status and level validation verified.')

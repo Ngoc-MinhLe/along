@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const {
   listNewsManagement,
   listNewsCategories,
+  listNewsCategoryTree,
   listNewsUsers,
   listNewsGroups,
 } = require('../src/news-service')
@@ -47,6 +48,10 @@ async function rejects(operation, code) {
       name: 'General', description: 'General news', status: 'active', defaultAccessPolicy: { mode: 'PUBLIC' },
     }), snapshot('category-2', {
       name: 'Disabled', description: '', status: 'disabled', defaultAccessPolicy: { mode: 'PUBLIC' },
+    }), snapshot('category-3', {
+      name: 'Phong thủy', description: 'Phong thủy', status: 'active', parentId: null, defaultAccessPolicy: { mode: 'PUBLIC' },
+    }), snapshot('category-4', {
+      name: 'Phòng khách', description: '', status: 'active', parentId: 'category-3', defaultAccessPolicy: { mode: 'PUBLIC' },
     })],
     users: [snapshot('user-1', { uid: 'user-1', email: 'user@example.test', displayName: 'User One', status: 'active' })],
     newsGroups: [snapshot('group-1', { id: 'group-1', name: 'Editors', status: 'active' })],
@@ -59,10 +64,12 @@ async function rejects(operation, code) {
   await rejects(() => listNewsManagement(actor([]), {}, db), 'permission-denied')
 
   const publicCategories = await listNewsCategories(null, {}, db)
-  assert.deepEqual(publicCategories.items.map((item) => item.id), ['category-1'])
+  assert.deepEqual(publicCategories.items.map((item) => item.id), ['category-1', 'category-3', 'category-4'])
   await rejects(() => listNewsCategories(actor(['news.read']), { includeDisabled: true }, db), 'permission-denied')
   const managedCategories = await listNewsCategories(actor(['news.update']), { includeDisabled: true }, db)
-  assert.equal(managedCategories.items.length, 2)
+  assert.equal(managedCategories.items.length, 4)
+  assert.deepEqual((await listNewsCategoryTree(actor(['news.update']), { query: 'PHONG', includeDisabled: true }, db)).items.map((item) => item.id).sort(), ['category-3', 'category-4'])
+  await rejects(() => listNewsCategoryTree(actor(['news.read']), {}, db), 'permission-denied')
 
   const users = await listNewsUsers(actor(['news.update']), {}, db)
   assert.equal(users.items[0].uid, 'user-1')

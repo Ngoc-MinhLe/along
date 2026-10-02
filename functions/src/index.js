@@ -32,6 +32,7 @@ exports.getNewsArticle = newsFunctions.getNewsArticle
 exports.listNewsManagement = newsFunctions.listNewsManagement
 exports.getNewsManagementArticle = newsFunctions.getNewsManagementArticle
 exports.listNewsCategories = newsFunctions.listNewsCategories
+exports.listNewsCategoryTree = newsFunctions.listNewsCategoryTree
 exports.listNewsUsers = newsFunctions.listNewsUsers
 exports.listNewsGroups = newsFunctions.listNewsGroups
 exports.createNewsArticle = newsFunctions.createNewsArticle

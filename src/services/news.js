@@ -47,6 +47,10 @@ export function listNewsCategories({ query = '', limit = 20, cursor = null, incl
   return callNewsFunction('listNewsCategories', { query, limit, ...(cursor ? { cursor } : {}), includeDisabled })
 }
 
+export function listNewsCategoryTree({ query = '', limit = 1000, includeDisabled = true } = {}) {
+  return callNewsFunction('listNewsCategoryTree', { query, limit, includeDisabled })
+}
+
 export function listNewsUsers({ query = '', limit = 20, cursor = null } = {}) {
   return callNewsFunction('listNewsUsers', { query, limit, ...(cursor ? { cursor } : {}) })
 }
@@ -87,15 +91,15 @@ export function setNewsAccessPolicy(articleId, accessPolicy) {
   return callNewsFunction('setNewsAccessPolicy', { articleId, accessPolicy })
 }
 
-export function createNewsCategory({ name, slug, description, defaultAccessPolicy }) {
-  const payload = { name, description, defaultAccessPolicy }
+export function createNewsCategory({ name, slug, description, parentId, defaultAccessPolicy }) {
+  const payload = { name, description, parentId: parentId || null, defaultAccessPolicy }
   if (typeof slug === 'string' && slug.trim()) payload.slug = slug.trim()
   return callNewsFunction('createNewsCategory', payload)
 }
 
-export function updateNewsCategory({ categoryId, name, slug, description, defaultAccessPolicy, status }) {
+export function updateNewsCategory({ categoryId, name, slug, description, parentId, defaultAccessPolicy, status }) {
   return callNewsFunction('updateNewsCategory', {
-    categoryId, name, slug, description, defaultAccessPolicy, status,
+    categoryId, name, slug, description, ...(parentId !== undefined ? { parentId: parentId || null } : {}), defaultAccessPolicy, status,
   })
 }
 

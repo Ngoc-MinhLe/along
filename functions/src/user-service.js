@@ -24,6 +24,7 @@ function permissionDenied(message) {
 const DEFAULT_LIST_LIMIT = 25
 const MAX_LIST_LIMIT = 50
 const USER_LIST_FIELDS = new Set(['displayName', 'email'])
+const MAX_SEARCH_STREAM_LIMIT = 50
 
 function encodeCursor(value) {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url')
@@ -34,6 +35,13 @@ function decodeCursor(value) {
   if (typeof value !== 'string' || value.length > 2048) invalidArgument('cursor is invalid.')
   try {
     const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    if (decoded?.version === 2 && Array.isArray(decoded.streams) && decoded.streams.length > 0
+      && decoded.streams.length <= 8
+      && decoded.streams.every((stream) => USER_LIST_FIELDS.has(stream.field)
+        && typeof stream.variant === 'string' && stream.variant.length <= 120
+        && typeof stream.value === 'string' && typeof stream.id === 'string' && stream.id)) {
+      return decoded
+    }
     if (!decoded || !USER_LIST_FIELDS.has(decoded.field) || typeof decoded.value !== 'string'
       || typeof decoded.id !== 'string' || !decoded.id) invalidArgument('cursor is invalid.')
     return decoded
@@ -61,6 +69,59 @@ function normalizeUserListPayload(data) {
     invalidArgument(`pageSize must be an integer from 1 to ${MAX_LIST_LIMIT}.`)
   }
   return { query: query.trim(), status, systemRole, customRoleId, pageSize, cursor: decodeCursor(value.cursor) }
+}
+
+function normalizeSearchText(value) {
+  return value.normalize('NFC')
+}
+
+function uniqueSearchVariants(query) {
+  const normalized = normalizeSearchText(query)
+  const lower = normalized.toLocaleLowerCase('vi')
+  const upper = normalized.toLocaleUpperCase('vi')
+  const capitalized = normalized.length
+    ? normalized.charAt(0).toLocaleUpperCase('vi') + normalized.slice(1).toLocaleLowerCase('vi')
+    : normalized
+  return [...new Set([normalized, lower, upper, capitalized].filter(Boolean))]
+}
+
+function buildSearchStreams(query) {
+  const fields = query.includes('@') ? ['email'] : ['displayName', 'email']
+  return fields.flatMap((field) => uniqueSearchVariants(query).map((variant) => ({
+    field,
+    variant,
+    key: `${field}:${variant}`,
+  })))
+}
+
+function buildUsersQuery(db, payload) {
+  let userQuery = db.collection('users')
+  if (payload.status) userQuery = userQuery.where('status', '==', payload.status)
+  if (payload.systemRole) userQuery = userQuery.where('systemRole', '==', payload.systemRole)
+  if (payload.customRoleId) userQuery = userQuery.where('customRoles', 'array-contains', payload.customRoleId)
+  return userQuery
+}
+
+function projectUser(item) {
+  const user = item.data()
+  return {
+    id: item.id,
+    uid: user.uid === item.id ? item.id : null,
+    email: typeof user.email === 'string' ? user.email : '',
+    displayName: typeof user.displayName === 'string' ? user.displayName : '',
+    photoURL: typeof user.photoURL === 'string' ? user.photoURL : '',
+    status: user.status || 'active',
+    systemRole: user.systemRole || SYSTEM_ROLES.USER,
+    customRoles: Array.isArray(user.customRoles) ? user.customRoles : [],
+    createdAt: user.createdAt || null,
+    updatedAt: user.updatedAt || null,
+  }
+}
+
+function compareProjectedUsers(left, right) {
+  const leftKey = normalizeSearchText(left.displayName || left.email || left.id).toLocaleLowerCase('vi')
+  const rightKey = normalizeSearchText(right.displayName || right.email || right.id).toLocaleLowerCase('vi')
+  return leftKey.localeCompare(rightKey, 'vi') || left.id.localeCompare(right.id)
 }
 
 function normalizePayload(data) {
@@ -196,38 +257,93 @@ async function updateUserProfile(actor, data, db = adminDb, auth = adminAuth) {
 async function listUsers(actor, data, db = adminDb) {
   requirePermission(actor, 'users.read')
   const payload = normalizeUserListPayload(data)
-  const searchField = payload.query.includes('@') ? 'email' : 'displayName'
-  let userQuery = db.collection('users')
-  if (payload.status) userQuery = userQuery.where('status', '==', payload.status)
-  if (payload.systemRole) userQuery = userQuery.where('systemRole', '==', payload.systemRole)
-  if (payload.customRoleId) userQuery = userQuery.where('customRoles', 'array-contains', payload.customRoleId)
-  userQuery = userQuery.orderBy(searchField).orderBy(FieldPath.documentId())
-  if (payload.query) userQuery = userQuery.endAt(`${payload.query}\uf8ff`)
-  if (payload.cursor) userQuery = userQuery.startAfter(payload.cursor.value, payload.cursor.id)
-  else if (payload.query) userQuery = userQuery.startAt(payload.query)
-  const snapshot = await userQuery.limit(payload.pageSize + 1).get()
-  const docs = snapshot.docs.slice(0, payload.pageSize)
-  const items = docs.map((item) => {
-    const user = item.data()
-    return {
-      id: item.id,
-      uid: user.uid === item.id ? item.id : null,
-      email: typeof user.email === 'string' ? user.email : '',
-      displayName: typeof user.displayName === 'string' ? user.displayName : '',
-      photoURL: typeof user.photoURL === 'string' ? user.photoURL : '',
-      status: user.status || 'active',
-      systemRole: user.systemRole || SYSTEM_ROLES.USER,
-      customRoles: Array.isArray(user.customRoles) ? user.customRoles : [],
-      createdAt: user.createdAt || null,
-      updatedAt: user.updatedAt || null,
+  if (!payload.query) {
+    const searchField = 'displayName'
+    let userQuery = buildUsersQuery(db, payload)
+      .orderBy(searchField).orderBy(FieldPath.documentId())
+    if (payload.cursor && payload.cursor.version !== 2) {
+      userQuery = userQuery.startAfter(payload.cursor.value, payload.cursor.id)
     }
-  }).filter((user) => user.uid)
-  const last = docs.at(-1)
+    const snapshot = await userQuery.limit(payload.pageSize + 1).get()
+    const docs = snapshot.docs.slice(0, payload.pageSize)
+    const items = docs.map(projectUser).filter((user) => user.uid)
+    const last = docs.at(-1)
+    return {
+      ok: true,
+      items,
+      hasMore: snapshot.docs.length > payload.pageSize,
+      nextCursor: last ? encodeCursor({ field: searchField, value: String(last.data()?.[searchField] || ''), id: last.id }) : null,
+      pageSize: payload.pageSize,
+    }
+  }
+
+  // Firestore range queries are case-sensitive and the existing production
+  // profiles do not all have normalized search fields. Search a small,
+  // bounded set of Unicode-normalized case variants across both searchable
+  // fields, then merge/dedupe on the server. This keeps legacy documents
+  // searchable without a collection scan or a production backfill.
+  const streams = buildSearchStreams(payload.query)
+  const previousStates = new Map(
+    (payload.cursor?.version === 2 ? payload.cursor.streams : [])
+      .map((stream) => [`${stream.field}:${stream.variant}`, stream]),
+  )
+  const streamLimit = Math.min(
+    MAX_SEARCH_STREAM_LIMIT,
+    Math.max(payload.pageSize + 1, payload.pageSize * 2),
+  )
+  const streamResults = await Promise.all(streams.map(async (stream) => {
+    let userQuery = buildUsersQuery(db, payload)
+      .orderBy(stream.field).orderBy(FieldPath.documentId())
+    const previous = previousStates.get(stream.key)
+    if (previous) userQuery = userQuery.startAfter(previous.value, previous.id)
+    else userQuery = userQuery.startAt(stream.variant)
+    userQuery = userQuery.endAt(`${stream.variant}\uf8ff`)
+    const snapshot = await userQuery.limit(streamLimit).get()
+    return { stream, snapshot }
+  }))
+
+  const merged = new Map()
+  for (const { stream, snapshot } of streamResults) {
+    for (const item of snapshot.docs) {
+      const user = projectUser(item)
+      if (!user.uid) continue
+      const source = { field: stream.field, variant: stream.variant, value: String(item.data()?.[stream.field] || ''), id: item.id }
+      const existing = merged.get(user.id)
+      if (existing) existing.sources.push(source)
+      else merged.set(user.id, { user, sources: [source] })
+    }
+  }
+
+  const ordered = [...merged.values()].sort((left, right) => compareProjectedUsers(left.user, right.user))
+  const page = ordered.slice(0, payload.pageSize)
+  const boundary = page.at(-1)?.user
+  const nextStates = new Map(previousStates)
+  if (boundary) {
+    const boundaryKey = normalizeSearchText(boundary.displayName || boundary.email || boundary.id).toLocaleLowerCase('vi')
+    for (const { stream, snapshot } of streamResults) {
+      const eligible = snapshot.docs.map((item) => {
+        const projected = projectUser(item)
+        const key = normalizeSearchText(projected.displayName || projected.email || projected.id).toLocaleLowerCase('vi')
+        return { item, key }
+      }).filter(({ key }) => key <= boundaryKey)
+      const last = eligible.at(-1)
+      if (last) {
+        nextStates.set(stream.key, {
+          field: stream.field,
+          variant: stream.variant,
+          value: String(last.item.data()?.[stream.field] || ''),
+          id: last.item.id,
+        })
+      }
+    }
+  }
+  const hasMore = streamResults.some(({ snapshot }) => snapshot.docs.length >= streamLimit)
+    || ordered.length > payload.pageSize
   return {
     ok: true,
-    items,
-    hasMore: snapshot.docs.length > payload.pageSize,
-    nextCursor: last ? encodeCursor({ field: searchField, value: String(last.data()?.[searchField] || ''), id: last.id }) : null,
+    items: page.map(({ user }) => user),
+    hasMore,
+    nextCursor: hasMore ? encodeCursor({ version: 2, streams: [...nextStates.values()] }) : null,
     pageSize: payload.pageSize,
   }
 }

@@ -85,6 +85,8 @@ async function denied(action, code) {
 }
 
 async function main() {
+  assert.ok(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST,
+    'This test must only run with Firestore and Auth emulators.')
   await Promise.all([
     createAccount('tier-root', 'ROOT_ADMIN'),
     createAccount('tier-super', 'SUPER_ADMIN'),
@@ -157,7 +159,47 @@ async function main() {
   assert.equal(actions.includes('MEMBERSHIP_TIER_DEACTIVATED'), true)
   assert.equal(auditSnapshot.docs.every((item) => item.data().actorUid !== 'forged'), true)
 
-  console.log('Membership tier emulator test PASS: dynamic create/update/deactivate, validation, manager boundary, idempotency and audit verified.')
+  // The production selector sends query, not just includeInactive/limit/cursor.
+  // Free must never be a fallback result for a VIP prefix.
+  for (const [tierId, name, level] of [
+    ['free', 'Free', 1], ['vip-upper', 'VIP One', 2], ['vip-title', 'Vip Two', 3],
+    ['vip-lower', 'vip Three', 4], ['vip-same-name', 'VIP One', 5],
+    ['gold-active', 'GOLD', 10], ['platinum', 'Platinum', 20],
+  ]) {
+    await call('createMembershipTier', rootToken, { tierId, name, level })
+  }
+  for (const [query, expected] of [
+    ['vip', ['vip-upper', 'vip-title', 'vip-lower', 'vip-same-name']],
+    ['VIP', ['vip-upper', 'vip-title', 'vip-lower', 'vip-same-name']],
+    ['gold', ['gold-active']], ['platinum', ['platinum']],
+  ]) {
+    const result = await call('listMembershipTiers', rootToken, { query, limit: 20, includeInactive: false })
+    assert.deepEqual(result.items.map((item) => item.id).sort(), expected.sort())
+    assert.equal(result.items.some((item) => item.id === 'free'), false)
+  }
+  const ids = []
+  let cursor = null
+  for (let page = 0; page < 10; page += 1) {
+    const result = await call('listMembershipTiers', rootToken, { query: 'vip', limit: 1, ...(cursor ? { cursor } : {}) })
+    assert.ok(result.items.length <= 1)
+    ids.push(...result.items.map((item) => item.id))
+    if (!result.hasMore) break
+    assert.ok(result.nextCursor && result.nextCursor !== cursor)
+    cursor = result.nextCursor
+  }
+  assert.equal(ids.length, 4)
+  assert.equal(new Set(ids).size, 4, 'Union pagination must neither skip nor duplicate tiers.')
+  const numeric = await call('listMembershipTiers', rootToken, { query: '20', limit: 20 })
+  assert.deepEqual(numeric.items.map((item) => item.id), ['platinum'])
+  await denied(() => call('listMembershipTiers', null, { query: 'vip' }), 'unauthenticated')
+  await denied(() => call('listMembershipTiers', rootToken, { query: 'vip', actorUid: 'forged' }), 'invalid-argument')
+  for (const token of [userToken, editorToken, adminToken]) {
+    await denied(() => call('listMembershipTiers', token, { query: 'vip', includeInactive: true }), 'permission-denied')
+  }
+  const publicTiers = await call('listMembershipTiers', userToken, { query: 'vip' })
+  assert.equal(publicTiers.items.length, 4, 'Existing authenticated active-tier read policy is preserved.')
+
+  console.log('Membership tier emulator test PASS: mutations/audit, query contract, vip/VIP/gold/platinum, bounded union pagination, no Free fallback and security verified.')
 }
 
 main().catch((error) => {

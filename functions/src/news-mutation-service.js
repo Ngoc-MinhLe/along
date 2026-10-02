@@ -98,6 +98,11 @@ function normalizeCategoryId(value) {
   return normalizeReferenceId(value, 'categoryId')
 }
 
+function normalizeParentId(value) {
+  if (value === null || value === undefined || value === '') return null
+  return normalizeReferenceId(value, 'parentId')
+}
+
 function normalizeManagedAccessPolicy(policy, { allowInherit = true } = {}) {
   assertObject(policy)
   assertAllowedKeys(policy, ['mode', 'minVipLevel', 'inheritCategory'], ['mode'])
@@ -161,7 +166,7 @@ function normalizeArticleUpdatePayload(data) {
 
 function normalizeCategoryCreatePayload(data) {
   assertAllowedKeys(data, [
-    'name', 'slug', 'description', 'defaultAccessPolicy',
+    'name', 'slug', 'description', 'defaultAccessPolicy', 'parentId',
   ], ['name', 'defaultAccessPolicy'])
   const name = normalizeText(data.name, 'name', { required: true, max: MAX_TITLE_LENGTH })
   return {
@@ -170,13 +175,14 @@ function normalizeCategoryCreatePayload(data) {
     description: data.description === undefined
       ? ''
       : normalizeText(data.description, 'description', { max: MAX_DESCRIPTION_LENGTH }),
+    parentId: normalizeParentId(data.parentId),
     defaultAccessPolicy: normalizeDirectAccessPolicy(data.defaultAccessPolicy),
   }
 }
 
 function normalizeCategoryUpdatePayload(data) {
   assertAllowedKeys(data, [
-    'categoryId', 'name', 'slug', 'description', 'defaultAccessPolicy', 'status',
+    'categoryId', 'name', 'slug', 'description', 'defaultAccessPolicy', 'status', 'parentId',
   ], ['categoryId'])
   const categoryId = normalizeReferenceId(data.categoryId, 'categoryId')
   const fields = {}
@@ -188,6 +194,7 @@ function normalizeCategoryUpdatePayload(data) {
     if (typeof data.status !== 'string' || !CATEGORY_STATUSES.has(data.status)) invalidArgument('Category status is invalid.')
     fields.status = data.status
   }
+  if (data.parentId !== undefined) fields.parentId = normalizeParentId(data.parentId)
   if (!Object.keys(fields).length) invalidArgument('At least one category field must be provided for update.')
   return { categoryId, fields }
 }
@@ -233,6 +240,11 @@ function categoryData(snapshot, categoryId) {
   }
   if (!data.defaultAccessPolicy || !normalizeAccessPolicy(data.defaultAccessPolicy)) {
     failedPrecondition('The News category access policy is invalid.')
+  }
+  if (data.parentId !== undefined && data.parentId !== null
+    && (typeof data.parentId !== 'string' || !data.parentId.trim() || data.parentId.includes('/')
+      || data.parentId.length > MAX_ID_LENGTH)) {
+    failedPrecondition('The News category parent is invalid.')
   }
   return { id: categoryId, ...data }
 }
@@ -281,6 +293,20 @@ async function readCategory(categoryId, db, transaction = null) {
     ? await transaction.get(categoryRef(db, categoryId))
     : await categoryRef(db, categoryId).get()
   return categoryData(snapshot, categoryId)
+}
+
+async function validateCategoryParent(transaction, categoryId, parentId, db) {
+  if (!parentId) return
+  if (parentId === categoryId) failedPrecondition('A category cannot be its own parent.')
+  const visited = new Set([categoryId])
+  let currentId = parentId
+  while (currentId) {
+    if (visited.has(currentId)) failedPrecondition('The category parent would create a circular reference.')
+    visited.add(currentId)
+    const parent = await readCategory(currentId, db, transaction)
+    if (parent.status !== 'active') failedPrecondition('A category must have an active parent.')
+    currentId = parent.parentId || null
+  }
 }
 
 async function createNewsArticle(actor, data, db = adminDb) {
@@ -406,16 +432,20 @@ async function createNewsCategory(actor, data, db = adminDb) {
   const payload = normalizeCategoryCreatePayload(data)
   const ref = db.collection('newsCategories').doc()
   const now = Timestamp.now()
-  await ref.create({
-    id: ref.id,
-    name: payload.name,
-    slug: payload.slug,
-    description: payload.description,
-    status: 'active',
-    defaultAccessPolicy: payload.defaultAccessPolicy,
-    createdBy: actor.uid,
-    createdAt: now,
-    updatedAt: now,
+  await db.runTransaction(async (transaction) => {
+    await validateCategoryParent(transaction, ref.id, payload.parentId, db)
+    transaction.create(ref, {
+      id: ref.id,
+      name: payload.name,
+      slug: payload.slug,
+      description: payload.description,
+      parentId: payload.parentId,
+      status: 'active',
+      defaultAccessPolicy: payload.defaultAccessPolicy,
+      createdBy: actor.uid,
+      createdAt: now,
+      updatedAt: now,
+    })
   })
   return { ok: true, operation: 'createNewsCategory', categoryId: ref.id }
 }
@@ -426,6 +456,7 @@ async function updateNewsCategory(actor, data, db = adminDb) {
   await db.runTransaction(async (transaction) => {
     const current = await readCategory(payload.categoryId, db, transaction)
     const next = { ...current, ...payload.fields }
+    await validateCategoryParent(transaction, payload.categoryId, next.parentId || null, db)
     if (next.status === 'active') normalizeDirectAccessPolicy(next.defaultAccessPolicy)
     transaction.update(categoryRef(db, payload.categoryId), { ...payload.fields, updatedAt: Timestamp.now() })
   })
@@ -438,6 +469,11 @@ async function deleteNewsCategory(actor, data, db = adminDb) {
   const categoryId = normalizeReferenceId(data.categoryId, 'categoryId')
   await db.runTransaction(async (transaction) => {
     await readCategory(categoryId, db, transaction)
+    const children = await transaction.get(db.collection('newsCategories').where('parentId', '==', categoryId).limit(100))
+    if (!children.empty) {
+      const countLabel = children.docs.length >= 100 ? 'at least 100' : String(children.docs.length)
+      failedPrecondition(`Cannot delete a category that still has ${countLabel} child categor${children.docs.length === 1 ? 'y' : 'ies'}.`)
+    }
     const articles = await transaction.get(db.collection('newsArticles').where('categoryId', '==', categoryId).limit(1))
     if (!articles.empty) failedPrecondition('Cannot delete a category that is still used by an article.')
     const aclEntries = await transaction.get(db.collection(`newsCategories/${categoryId}/acl`).limit(1))
@@ -540,6 +576,7 @@ module.exports = {
   normalizeArticleUpdatePayload,
   normalizeCategoryCreatePayload,
   normalizeCategoryUpdatePayload,
+  normalizeParentId,
   normalizeAclPayload,
   createNewsArticle,
   updateNewsArticle,

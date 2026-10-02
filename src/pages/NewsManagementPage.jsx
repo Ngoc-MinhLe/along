@@ -10,11 +10,11 @@ import {
   archiveNewsArticle, unarchiveNewsArticle,
   setNewsAccessPolicy, createNewsCategory, updateNewsCategory, deleteNewsCategory,
   setNewsAclEntry, removeNewsAclEntry, listNewsManagement, getNewsManagementArticle,
-  listNewsCategories, listNewsUsers, listNewsGroups,
+  listNewsCategories, listNewsCategoryTree, listNewsUsers, listNewsGroups,
 } from '../services/news'
 
 const emptyArticle = { articleId: '', title: '', slug: '', excerpt: '', content: '', contentFormat: 'PLAIN_TEXT', categoryId: '', mode: 'PUBLIC', minVipLevel: 1 }
-const emptyCategory = { categoryId: '', name: '', slug: '', description: '', mode: 'PUBLIC', minVipLevel: 1, status: 'active' }
+const emptyCategory = { categoryId: '', name: '', slug: '', description: '', parentId: null, mode: 'PUBLIC', minVipLevel: 1, status: 'active' }
 const emptyAcl = { scope: 'ARTICLE', resourceId: '', principalType: 'USER', principalId: '' }
 
 function makePolicy(mode, minVipLevel) {
@@ -39,6 +39,64 @@ function articleLabel(article) {
 
 function articleMeta(article) {
   return `${statusLabel(article.status)} · ${policyLabel(article.accessPolicy)}`
+}
+
+function buildCategoryTree(items) {
+  const nodes = new Map((items || []).map((item) => [item.id, { ...item, children: [] }]))
+  const roots = []
+  for (const node of nodes.values()) {
+    const parent = node.parentId ? nodes.get(node.parentId) : null
+    if (parent && parent.id !== node.id) parent.children.push(node)
+    else roots.push(node)
+  }
+  const sortNodes = (list) => {
+    list.sort((a, b) => a.name.localeCompare(b.name, 'vi') || a.id.localeCompare(b.id))
+    list.forEach((node) => sortNodes(node.children))
+    return list
+  }
+  return sortNodes(roots)
+}
+
+function flattenCategoryTree(nodes, depth = 0, result = []) {
+  for (const node of nodes) {
+    result.push({ node, depth })
+    flattenCategoryTree(node.children, depth + 1, result)
+  }
+  return result
+}
+
+function collectDescendantIds(items, categoryId) {
+  const children = new Map()
+  for (const item of items) {
+    if (!item.parentId) continue
+    const list = children.get(item.parentId) || []
+    list.push(item.id)
+    children.set(item.parentId, list)
+  }
+  const result = new Set()
+  const visit = (id) => {
+    for (const childId of children.get(id) || []) {
+      if (result.has(childId)) continue
+      result.add(childId)
+      visit(childId)
+    }
+  }
+  visit(categoryId)
+  return result
+}
+
+function CategoryTreeNode({ node, depth, expanded, onToggle, onCreateChild, onEdit, onDelete, canCreate, canUpdate, canDelete }) {
+  const isExpanded = expanded.has(node.id)
+  return <div role="treeitem" aria-expanded={node.children.length ? isExpanded : undefined}>
+    <div className="news-category-tree-row" style={{ '--category-depth': depth }}>
+      <button className="news-category-tree-toggle" type="button" onClick={() => onToggle(node.id)} disabled={!node.children.length} aria-label={node.children.length ? (isExpanded ? 'Thu gọn' : 'Mở rộng') : 'Không có chuyên mục con'}>{node.children.length ? (isExpanded ? '▾' : '▸') : '•'}</button>
+      {canUpdate
+        ? <button className="news-category-tree-name" type="button" onClick={() => onEdit(node)}>{node.name || node.id}<small>{node.status === 'active' ? 'Đang hoạt động' : 'Đã tắt'} · {node.slug || node.id}</small></button>
+        : <div className="news-category-tree-name">{node.name || node.id}<small>{node.status === 'active' ? 'Đang hoạt động' : 'Đã tắt'} · {node.slug || node.id}</small></div>}
+      <div className="news-category-tree-actions">{canCreate && <button type="button" className="news-inline-link" onClick={() => onCreateChild(node)}>+ Con</button>}{canUpdate && <button type="button" className="news-inline-link" onClick={() => onEdit(node)}>Sửa</button>}{canDelete && <button type="button" className="news-inline-link news-category-delete-link" onClick={() => onDelete(node)}>Xóa</button>}</div>
+    </div>
+    {isExpanded && node.children.length > 0 && <div role="group">{node.children.map((child) => <CategoryTreeNode key={child.id} node={child} depth={depth + 1} expanded={expanded} onToggle={onToggle} onCreateChild={onCreateChild} onEdit={onEdit} onDelete={onDelete} canCreate={canCreate} canUpdate={canUpdate} canDelete={canDelete} />)}</div>}
+  </div>
 }
 
 function Field({ label, help, children }) {
@@ -118,6 +176,11 @@ export default function NewsManagementPage() {
   const [category, setCategory] = useState(emptyCategory)
   const [categorySlugEdited, setCategorySlugEdited] = useState(false)
   const [showCategorySlugEditor, setShowCategorySlugEditor] = useState(false)
+  const [categoryTreeItems, setCategoryTreeItems] = useState([])
+  const [categoryTreeSearch, setCategoryTreeSearch] = useState('')
+  const [categoryTreeLoading, setCategoryTreeLoading] = useState(false)
+  const [categoryTreeError, setCategoryTreeError] = useState('')
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState(() => new Set())
   const [acl, setAcl] = useState(emptyAcl)
   const [accessId, setAccessId] = useState('')
   const [accessMode, setAccessMode] = useState('PUBLIC')
@@ -145,8 +208,14 @@ export default function NewsManagementPage() {
   const editorRequestRef = useRef(0)
 
   const canReadManagementResources = canCreate || canUpdate || canDelete || canPublish || canRestore
+  const canManageCategories = canCreate || canUpdate || canDelete
   const aclResourceOptions = useMemo(() => acl.scope === 'ARTICLE' ? articles : categories, [acl.scope, articles, categories])
   const principalOptions = acl.principalType === 'USER' ? users : groups
+  const categoryTree = useMemo(() => buildCategoryTree(categoryTreeItems), [categoryTreeItems])
+  const categoryTreeRows = useMemo(() => flattenCategoryTree(categoryTree), [categoryTree])
+  const categoryDescendantIds = useMemo(() => collectDescendantIds(categoryTreeItems, category.categoryId), [categoryTreeItems, category.categoryId])
+  const categoryParentOptions = useMemo(() => categoryTreeRows
+    .filter(({ node }) => node.id !== category.categoryId && !categoryDescendantIds.has(node.id)), [categoryTreeRows, category.categoryId, categoryDescendantIds])
 
   useEffect(() => {
     if (!canReadManagementResources) return undefined
@@ -170,6 +239,26 @@ export default function NewsManagementPage() {
     loadSelectors()
     return () => { cancelled = true }
   }, [canCreate, canUpdate, canDelete, canPublish, canReadManagementResources, canRestore, selectorRefreshKey])
+
+  useEffect(() => {
+    if (!canManageCategories) return undefined
+    let cancelled = false
+    const timer = setTimeout(async () => {
+      setCategoryTreeLoading(true); setCategoryTreeError('')
+      try {
+        const result = await listNewsCategoryTree({ query: categoryTreeSearch, limit: 1000, includeDisabled: true })
+        if (cancelled) return
+        const items = result.items || []
+        setCategoryTreeItems(items)
+        setExpandedCategoryIds(new Set(items.map((item) => item.id)))
+      } catch (loadError) {
+        if (!cancelled) setCategoryTreeError(loadError.message || 'Không thể tải cây chuyên mục.')
+      } finally {
+        if (!cancelled) setCategoryTreeLoading(false)
+      }
+    }, categoryTreeSearch.trim() ? 250 : 0)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [canManageCategories, categoryTreeSearch, selectorRefreshKey])
 
   const searchNewsUsers = useCallback((query) => listNewsUsers({ query, limit: 20 }), [])
   const searchNewsGroups = useCallback((query) => listNewsGroups({ query, limit: 20 }), [])
@@ -209,6 +298,7 @@ export default function NewsManagementPage() {
     if (code === 'permission-denied') return 'Bạn không có quyền thực hiện thao tác này.'
     if (code === 'invalid-argument' && /slug/i.test(rawMessage)) return 'Đường dẫn chưa hợp lệ. Hãy dùng chữ cái, chữ số và dấu gạch ngang.'
     if (code === 'invalid-argument') return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các trường bắt buộc.'
+    if (code === 'failed-precondition' && /category|chuyên mục|child|con|article|bài viết|ACL/i.test(rawMessage)) return rawMessage
     return 'Không thể thực hiện thao tác. Vui lòng thử lại.'
   }
 
@@ -397,12 +487,62 @@ export default function NewsManagementPage() {
       return
     }
     await runAction(async () => {
-      await createNewsCategory({ ...category, slug, defaultAccessPolicy: makePolicy(category.mode, category.minVipLevel) })
+      await createNewsCategory({ ...category, slug, parentId: category.parentId, defaultAccessPolicy: makePolicy(category.mode, category.minVipLevel) })
       setCategory(emptyCategory)
       setCategorySlugEdited(false)
       setShowCategorySlugEditor(false)
       setSelectorRefreshKey((value) => value + 1)
     }, 'Đã tạo chuyên mục và cập nhật danh sách.')
+  }
+
+  function toggleCategory(categoryId) {
+    setExpandedCategoryIds((current) => {
+      const next = new Set(current)
+      if (next.has(categoryId)) next.delete(categoryId)
+      else next.add(categoryId)
+      return next
+    })
+  }
+
+  function expandAllCategories() {
+    setExpandedCategoryIds(new Set(categoryTreeItems.map((item) => item.id)))
+  }
+
+  function collapseAllCategories() {
+    setExpandedCategoryIds(new Set())
+  }
+
+  function editCategory(selected) {
+    setCategory({
+      ...emptyCategory,
+      categoryId: selected.id,
+      name: selected.name || '',
+      slug: selected.slug || '',
+      description: selected.description || '',
+      parentId: selected.parentId || null,
+      status: selected.status || 'active',
+      mode: selected.defaultAccessPolicy?.mode || 'PUBLIC',
+      minVipLevel: selected.defaultAccessPolicy?.minVipLevel || 1,
+    })
+    setCategorySlugEdited(false)
+    setShowCategorySlugEditor(false)
+    document.getElementById('news-category-management')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function createChildCategory(parent) {
+    setCategory({ ...emptyCategory, parentId: parent.id })
+    setCategorySlugEdited(false)
+    setShowCategorySlugEditor(false)
+    document.getElementById('news-category-management')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  async function removeCategory(selected) {
+    if (!window.confirm(`Xóa chuyên mục "${selected.name || selected.id}"? Hệ thống sẽ từ chối nếu còn chuyên mục con, bài viết hoặc ACL phụ thuộc.`)) return
+    await runAction(async () => {
+      await deleteNewsCategory(selected.id)
+      if (category.categoryId === selected.id) setCategory(emptyCategory)
+      setSelectorRefreshKey((value) => value + 1)
+    }, 'Đã xóa chuyên mục.')
   }
 
   function selectAccessArticle(articleId, articleOption = null) {
@@ -491,9 +631,19 @@ export default function NewsManagementPage() {
     </details>}
 
     {(canCreate || canUpdate || canDelete) && <section id="news-category-management" className="news-management-card news-advanced-card">
+      <div className="news-category-tree-panel" aria-label="Cây chuyên mục">
+        <div className="news-category-tree-toolbar"><Field label="Tìm chuyên mục" help="Tìm không phân biệt hoa thường; kết quả vẫn giữ ngữ cảnh chuyên mục cha."><input value={categoryTreeSearch} onChange={(event) => setCategoryTreeSearch(event.target.value)} placeholder="Ví dụ: phong hoặc phong thuy" /></Field><div className="news-action-row"><button className="admin-secondary-button" type="button" onClick={expandAllCategories} disabled={categoryTreeLoading || !categoryTreeItems.length}>Mở tất cả</button><button className="admin-secondary-button" type="button" onClick={collapseAllCategories} disabled={categoryTreeLoading || !categoryTreeItems.length}>Thu gọn tất cả</button></div></div>
+        <div className="news-category-parent-field"><Field label="Chuyên mục cha" help="Để trống để tạo ở cấp cao nhất. Khi sửa, các hậu duệ của chuyên mục hiện tại không được chọn làm cha."><select value={category.parentId || ''} onChange={(event) => setCategory((current) => ({ ...current, parentId: event.target.value || null }))}><option value="">Không có / Root</option>{categoryParentOptions.map(({ node, depth }) => <option key={node.id} value={node.id}>{`${'— '.repeat(depth)}${node.name || node.id}`}</option>)}</select></Field></div>
+        <div className="news-category-tree-heading"><strong>Cây chuyên mục</strong><small>{categoryTreeItems.length ? `${categoryTreeItems.length} chuyên mục` : 'Chưa có chuyên mục'}</small></div>
+        {categoryTreeLoading && <p className="news-help">Đang tải cây chuyên mục...</p>}
+        {categoryTreeError && <p className="admin-error" role="alert">{categoryTreeError}</p>}
+        {!categoryTreeLoading && !categoryTreeError && !categoryTreeItems.length && <EmptyState title="Chưa có chuyên mục." >Chuyên mục giúp phân loại bài viết. Hãy tạo chuyên mục đầu tiên.</EmptyState>}
+        {!categoryTreeLoading && !categoryTreeError && categoryTreeItems.length > 0 && <div className="news-category-tree" role="tree">{categoryTree.map((node) => <CategoryTreeNode key={node.id} node={node} depth={0} expanded={expandedCategoryIds} onToggle={toggleCategory} onCreateChild={createChildCategory} onEdit={editCategory} onDelete={removeCategory} canCreate={canCreate} canUpdate={canUpdate} canDelete={canDelete} />)}</div>}
+        {categoryTreeItems.length >= 1000 && <p className="news-help">Danh sách đang hiển thị tối đa 1.000 chuyên mục. Hãy dùng tìm kiếm hoặc phân nhóm trước khi taxonomy lớn hơn.</p>}
+      </div>
       <SectionHeader icon="▣" title="Quản lý chuyên mục" subtitle="Chuyên mục giúp phân loại các bài viết theo chủ đề." tone="advanced" />
       <div className="news-form-grid">
-        <SearchableSelect label="Chuyên mục cần sửa/xóa" value={category.categoryId} selectedOption={categories.find((item) => item.id === category.categoryId) || null} loadOptions={searchNewsCategories} onChange={(value, option) => { const selected = option || categories.find((item) => item.id === value); setCategory({ ...category, categoryId: value, name: selected?.name || '', slug: selected?.slug || '', description: selected?.description || '', status: selected?.status || 'active' }); if (selected) setCategories((current) => current.some((item) => item.id === selected.id) ? current : [...current, selected]); setCategorySlugEdited(false); setShowCategorySlugEditor(false) }} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục. Hãy tạo chuyên mục đầu tiên." loading={selectorLoading} />
+        <SearchableSelect label="Chuyên mục cần sửa/xóa" value={category.categoryId} selectedOption={categories.find((item) => item.id === category.categoryId) || null} loadOptions={searchNewsCategories} onChange={(value, option) => { const selected = option || categories.find((item) => item.id === value); setCategory({ ...category, categoryId: value, name: selected?.name || '', slug: selected?.slug || '', description: selected?.description || '', parentId: selected?.parentId || null, status: selected?.status || 'active' }); if (selected) setCategories((current) => current.some((item) => item.id === selected.id) ? current : [...current, selected]); setCategorySlugEdited(false); setShowCategorySlugEditor(false) }} getLabel={(item) => item.name || item.id} getMeta={(item) => statusLabel(item.status)} placeholder="Tìm chuyên mục..." noDataMessage="Chưa có chuyên mục. Hãy tạo chuyên mục đầu tiên." loading={selectorLoading} />
         <Field label="Tên chuyên mục *"><input value={category.name} onChange={(event) => updateCategoryName(event.target.value)} /></Field>
         <div><GeneratedSlug value={category.slug} customized={categorySlugEdited} source="tên chuyên mục" onCustomize={() => setShowCategorySlugEditor(true)} />{showCategorySlugEditor && <Field label="Đường dẫn tùy chỉnh"><input value={category.slug} onChange={(event) => updateCategorySlug(event.target.value)} /></Field>}</div>
         <Field label="Mô tả (tùy chọn)"><textarea rows="2" value={category.description} onChange={(event) => setCategory({ ...category, description: event.target.value })} /></Field>

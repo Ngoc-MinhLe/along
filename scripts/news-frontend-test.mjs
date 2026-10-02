@@ -12,7 +12,7 @@ for (const functionName of [
   'archiveNewsArticle', 'unarchiveNewsArticle',
   'createNewsCategory', 'updateNewsCategory', 'deleteNewsCategory',
   'setNewsAclEntry', 'removeNewsAclEntry', 'listNewsManagement',
-  'getNewsManagementArticle', 'listNewsCategories', 'listNewsUsers', 'listNewsGroups',
+  'getNewsManagementArticle', 'listNewsCategories', 'listNewsCategoryTree', 'listNewsUsers', 'listNewsGroups',
 ]) assert.match(service, new RegExp(`callNewsFunction\\('${functionName}'`), `Missing News callable: ${functionName}`)
 
 assert.match(app, /path="\/tin-tuc" element={<NewsListPage \/>}/)
@@ -23,6 +23,13 @@ assert.doesNotMatch(service, /actorUid|systemRole|permissions|updateDoc|setDoc|d
 assert.doesNotMatch(management, /actorUid|updateDoc|setDoc|deleteDoc|contentEntitlements|newsGroups\/.*members/)
 assert.doesNotMatch(management, /<input[^>]*(articleId|categoryId|resourceId|principalId)/)
 assert.match(management, /SearchableSelect/)
+assert.match(management, /listNewsCategoryTree/)
+assert.match(management, /CategoryTreeNode/)
+assert.match(management, /function CategoryTreeNode\([^)]*canCreate[^)]*canUpdate[^)]*canDelete/)
+assert.match(management, /canCreate=\{canCreate\} canUpdate=\{canUpdate\} canDelete=\{canDelete\}/)
+assert.match(management, /Mở tất cả/)
+assert.match(management, /Thu gọn tất cả/)
+assert.match(management, /parentId/)
 assert.match(fs.readFileSync('src/pages/NewsListPage.jsx', 'utf8'), /SearchableSelect/)
 for (const workflowLabel of ['Lưu nháp', 'Xem trước', 'Đăng bài', 'Danh sách bài viết', 'Lưu thay đổi', 'Hủy', 'Đang chỉnh sửa']) assert.match(management, new RegExp(workflowLabel))
 assert.match(management, /draftArticle/)

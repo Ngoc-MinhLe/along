@@ -11,6 +11,7 @@ export default function AsyncSearchSelect({
   placeholder = 'Tìm người dùng...',
   helperText = 'Nhập ít nhất 2 ký tự để tìm kiếm.',
   minQueryLength = 2,
+  clearSelectionOnSearch = false,
   disabled = false,
   emptyMessage = 'Không tìm thấy kết quả phù hợp.',
 }) {
@@ -27,10 +28,11 @@ export default function AsyncSearchSelect({
 
   useEffect(() => {
     const normalized = query.trim()
-    if (normalized.length < minQueryLength) {
-      setOptions([])
-      setError('')
-      setHighlightedIndex(-1)
+    setOptions([])
+    setError('')
+    setHighlightedIndex(-1)
+    setLoading(false)
+    if (disabled || normalized.length < minQueryLength) {
       return undefined
     }
     let cancelled = false
@@ -51,7 +53,18 @@ export default function AsyncSearchSelect({
       }
     }, 300)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [loadOptions, minQueryLength, query])
+  }, [disabled, loadOptions, minQueryLength, query])
+
+  function changeQuery(event) {
+    setQuery(event.target.value)
+    setOptions([])
+    setError('')
+    setHighlightedIndex(-1)
+    if (clearSelectionOnSearch && value) {
+      setSelected(null)
+      onChange('', null)
+    }
+  }
 
   function choose(option) {
     setSelected(option)
@@ -92,7 +105,7 @@ export default function AsyncSearchSelect({
   return <div className="async-search-select">
     <label>
       <span>{label}</span>
-      <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={handleKeyDown} placeholder={placeholder} disabled={disabled} aria-label={label} aria-expanded={options.length > 0} aria-controls={resultsId} />
+      <input type="search" value={query} onChange={changeQuery} onKeyDown={handleKeyDown} placeholder={placeholder} disabled={disabled} aria-label={label} aria-expanded={options.length > 0} aria-controls={resultsId} />
     </label>
     <small className="admin-field-help">{helperText}</small>
     {loading && <small className="admin-muted" role="status">Đang tìm kiếm...</small>}

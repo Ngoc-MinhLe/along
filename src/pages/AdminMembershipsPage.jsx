@@ -58,7 +58,7 @@ export default function AdminMembershipsPage() {
   const [historyPageCursors, setHistoryPageCursors] = useState([null])
 
   const tierMap = useMemo(() => Object.fromEntries(tiers.map((tier) => [tier.id, tier])), [tiers])
-  const formTier = selectedTier || tiers.find((tier) => tier.id === form.tierId || tier.tierId === form.tierId) || null
+  const formTier = selectedTier?.id === form.tierId ? selectedTier : tiers.find((tier) => tier.id === form.tierId) || null
 
   async function loadData(cursor = null, targetPage = 1) {
     setLoading(true); setError('')
@@ -73,7 +73,6 @@ export default function AdminMembershipsPage() {
       setPage(targetPage)
       setPageCursors((current) => { const next = current.slice(0, targetPage); next[targetPage] = membershipResult.nextCursor || null; return next })
       setTiers(tierResult.items || [])
-      setForm((current) => ({ ...current, tierId: current.tierId || tierResult.items?.[0]?.id || '' }))
     } catch (loadError) {
       setError(loadError.message || 'Không thể tải dữ liệu Membership.')
     } finally { setLoading(false) }
@@ -143,7 +142,7 @@ export default function AdminMembershipsPage() {
       <h3>Cấp Membership thủ công</h3><p className="admin-muted">Chọn tài khoản, cấp Membership và thời gian hiệu lực. Mỗi tài khoản chỉ có tối đa một Membership đang hiệu lực.</p>
       <div className="membership-form-grid">
         <AsyncSearchSelect label="Tài khoản nhận Membership" value={form.userId} selectedOption={selectedUser} onChange={(value, option) => selectUser(value, option)} loadOptions={searchUsers} getLabel={(user) => user.displayName || user.email || user.id} getMeta={(user) => user.email || user.id} placeholder="Tìm người dùng..." helperText="Nhập ít nhất 2 ký tự để tìm kiếm. Kết quả được tải theo từng trang." disabled={busy} />
-        <AsyncSearchSelect label="Membership Tier" value={form.tierId} selectedOption={formTier} onChange={selectTier} loadOptions={searchTiers} getLabel={(tier) => tier.name || tier.id} getMeta={(tier) => `Level ${tier.level}${tier.description ? ` · ${tier.description}` : ''}`} placeholder="Tìm Membership Tier..." helperText="Tìm theo tên hoặc level; dữ liệu được tìm trên server." minQueryLength={1} disabled={busy} />
+        <AsyncSearchSelect label="Membership Tier" value={form.tierId} selectedOption={formTier} onChange={selectTier} loadOptions={searchTiers} getLabel={(tier) => tier.name || tier.id} getMeta={(tier) => `Level ${tier.level}${tier.description ? ` · ${tier.description}` : ''}`} placeholder="Tìm Membership Tier..." helperText="Tìm theo tên hoặc level, sau đó chọn một kết quả. Gõ từ khóa chưa phải là chọn Tier." minQueryLength={1} clearSelectionOnSearch disabled={busy} />
         <label>Bắt đầu hiệu lực<input type="datetime-local" value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} disabled={busy} /></label>
         <label>Kết thúc hiệu lực <span className="membership-optional">(tùy chọn)</span><input type="datetime-local" value={form.expiresAt} onChange={(event) => setForm({ ...form, expiresAt: event.target.value })} disabled={busy} /></label>
       </div>
