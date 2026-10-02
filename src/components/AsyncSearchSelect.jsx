@@ -8,6 +8,7 @@ export default function AsyncSearchSelect({
   loadOptions,
   getLabel = (option) => option.label || option.name || option.id,
   getMeta,
+  getDescription,
   placeholder = 'Tìm người dùng...',
   helperText = 'Nhập ít nhất 2 ký tự để tìm kiếm.',
   minQueryLength = 2,
@@ -113,11 +114,11 @@ export default function AsyncSearchSelect({
     {!loading && !error && query.trim().length >= minQueryLength && !options.length && <small className="admin-muted">{emptyMessage}</small>}
     {options.length > 0 && <div id={resultsId} className="async-search-results" role="listbox" aria-label={`${label} results`}>
       {options.map((option, index) => <button type="button" key={option.id} onClick={() => choose(option)} disabled={disabled} role="option" aria-selected={index === highlightedIndex} className={index === highlightedIndex ? 'is-highlighted' : ''}>
-        <strong>{getLabel(option)}</strong>{getMeta?.(option) && <small>{getMeta(option)}</small>}
+        <strong>{getLabel(option)}</strong>{getDescription?.(option) && <small className="async-search-context">{getDescription(option)}</small>}{getMeta?.(option) && <small>{getMeta(option)}</small>}
       </button>)}
     </div>}
     {selected && value && <div className="async-search-selected">
-      <span><strong>{getLabel(selected)}</strong>{getMeta?.(selected) && <small>{getMeta(selected)}</small>}</span>
+      <span><strong>{getLabel(selected)}</strong>{getDescription?.(selected) && <small className="async-search-context">{getDescription(selected)}</small>}{getMeta?.(selected) && <small>{getMeta(selected)}</small>}</span>
       <button type="button" onClick={clear} disabled={disabled}>Xóa lựa chọn</button>
     </div>}
   </div>

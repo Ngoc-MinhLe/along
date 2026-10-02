@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listNews, listNewsCategories } from '../services/news'
 import SearchableSelect from '../components/SearchableSelect'
+import { buildCategoryBreadcrumb } from '../utils/categoryTree'
 
 function formatDate(value) {
   if (!value) return '—'
@@ -46,7 +47,7 @@ export default function NewsListPage() {
   return <section className="page-section news-page">
     <div className="page-title-row"><div><p className="eyebrow">MODULE 2 · NEWS</p><h2>Tin tức</h2><p className="lead">Các bài viết đã xuất bản, được lọc theo chính sách truy cập hiện tại của tài khoản.</p></div></div>
     <section className="news-toolbar">
-      <SearchableSelect label="Category (tùy chọn)" value={categoryId} options={categories} onChange={setCategoryId} getLabel={(item) => item.name || item.id} getMeta={() => 'active'} placeholder="Tìm category..." />
+      <SearchableSelect label="Category (tùy chọn)" value={categoryId} options={categories} onChange={setCategoryId} getLabel={(item) => item.name || item.id} getDescription={(item) => buildCategoryBreadcrumb(item.id, categories)} getMeta={() => 'active'} placeholder="Tìm category..." />
       <button className="secondary-button" type="button" onClick={loadNews} disabled={loading}>Tải lại</button>
     </section>
     {error && <p className="error-message" role="alert">{error}</p>}

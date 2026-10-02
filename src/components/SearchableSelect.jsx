@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import AsyncSearchSelect from './AsyncSearchSelect'
+import { normalizeSearchText } from '../utils/searchText'
 
 /**
  * A small, dependency-free resource picker. The selected value remains the
@@ -12,6 +13,7 @@ export default function SearchableSelect({
   onChange,
   getLabel = (option) => option.label || option.name || option.id,
   getMeta,
+  getDescription,
   placeholder = 'Tìm và chọn…',
   emptyMessage = 'Không tìm thấy lựa chọn phù hợp.',
   noDataMessage = 'Chưa có dữ liệu.',
@@ -32,8 +34,9 @@ export default function SearchableSelect({
       loadOptions={loadOptions}
       getLabel={getLabel}
       getMeta={getMeta}
+      getDescription={getDescription}
       placeholder={placeholder}
-      helperText={helperText || 'Nháº­p tá»« khÃ³a Ä‘á»ƒ tÃ¬m kiáº¿m trÃªn server.'}
+      helperText={helperText || 'Nhập từ khóa để tìm kiếm trên server.'}
       minQueryLength={minQueryLength}
       disabled={disabled || loading}
       emptyMessage={emptyMessage}
@@ -42,9 +45,9 @@ export default function SearchableSelect({
   const [query, setQuery] = useState('')
   const selected = options.find((option) => option.id === value) || null
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLowerCase()
+    const normalized = normalizeSearchText(query)
     if (!normalized) return options
-    return options.filter((option) => `${getLabel(option)} ${getMeta?.(option) || ''}`.toLowerCase().includes(normalized))
+    return options.filter((option) => normalizeSearchText(`${getLabel(option)} ${getMeta?.(option) || ''}`).includes(normalized))
   }, [getLabel, getMeta, options, query])
 
   return <div className="resource-selector">
@@ -67,12 +70,13 @@ export default function SearchableSelect({
     >
       <option value="">{loading ? 'Đang tải…' : `-- ${label} --`}</option>
       {filtered.map((option) => <option key={option.id} value={option.id}>
-        {getLabel(option)}{getMeta?.(option) ? ` · ${getMeta(option)}` : ''}
+        {getLabel(option)}{getDescription?.(option) ? ` · ${getDescription(option)}` : ''}{getMeta?.(option) ? ` · ${getMeta(option)}` : ''}
       </option>)}
     </select>
     {!loading && !filtered.length && <small className="resource-selector-empty">{query.trim() ? emptyMessage : noDataMessage}</small>}
     {selected && <div className="resource-selector-preview">
       <strong>{getLabel(selected)}</strong>
+      {getDescription?.(selected) && <small className="resource-selector-context">{getDescription(selected)}</small>}
       {getMeta?.(selected) && <small>{getMeta(selected)}</small>}
       {allowClear && <button type="button" onClick={() => onChange('')} disabled={disabled}>Xóa lựa chọn</button>}
     </div>}
